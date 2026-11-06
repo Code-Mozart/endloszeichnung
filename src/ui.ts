@@ -22,6 +22,7 @@ export function setupUI(app: App) {
   });
   $('#selBtn').onclick = () => app.selectButton();
   $('#wrapBtn').onclick = () => app.wrapButton();
+  $('#gridBtn').onclick = () => app.toggleGrid();
   $('#undo').onclick = () => app.store.undo();
   $('#redo').onclick = () => app.store.redo();
   $('#north').onclick = () => app.unlockRotation();
@@ -46,7 +47,7 @@ export function setupUI(app: App) {
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
-    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, opacity', moreBtn: 'Show or hide the second toolbar row',
+    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', gridBtn: 'Show or hide the background grid', moreBtn: 'Show or hide the second toolbar row',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
@@ -131,7 +132,40 @@ export function setupUI(app: App) {
 
   // ---- layers popup ----
   const llist = $('#llist');
-  let sliding = false;
+  let sliding = false; // a slider or reorder drag is in progress: don't rebuild the list under it
+  let swallow = false; // the click that ends a long-press rename must not also select the layer
+
+  /** Drag a layer row by its handle; neighbours swap places as the row passes their middle. One undo step on release. */
+  function startDrag(e: PointerEvent, row: HTMLElement, grip: HTMLElement) {
+    e.preventDefault(); sliding = true;
+    grip.setPointerCapture(e.pointerId);
+    row.classList.add('drag');
+    let startY = e.clientY;
+    const move = (ev: PointerEvent) => {
+      row.style.transform = `translateY(${ev.clientY - startY}px)`;
+      for (;;) {
+        const c = row.getBoundingClientRect(), mid = c.top + c.height / 2;
+        const prev = row.previousElementSibling as HTMLElement | null, next = row.nextElementSibling as HTMLElement | null;
+        const pr = prev?.getBoundingClientRect(), nr = next?.getBoundingClientRect();
+        const before = row.offsetTop;
+        if (nr && mid > nr.top + nr.height / 2) llist.insertBefore(next!, row);
+        else if (pr && mid < pr.top + pr.height / 2) llist.insertBefore(row, prev!);
+        else break;
+        startY += row.offsetTop - before; // keep the row under the finger after its layout slot changed
+        row.style.transform = `translateY(${ev.clientY - startY}px)`;
+      }
+    };
+    const end = (ev: PointerEvent) => {
+      grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', end); grip.removeEventListener('pointercancel', end);
+      sliding = false;
+      row.style.transform = ''; row.classList.remove('drag');
+      const topFirst = [...llist.children].map(r => (r as HTMLElement).dataset.id!);
+      if (ev.type === 'pointerup') app.setLayerOrder(topFirst.reverse());
+      renderLayers();
+    };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+  }
+
   function renderLayers() {
     if ($('#layers').classList.contains('off')) return;
     if (sliding) return; // don't rebuild under a dragged slider
@@ -144,16 +178,31 @@ export function setupUI(app: App) {
         const b = document.createElement('button'); b.textContent = txt; b.className = cls; b.disabled = dis; b.onclick = fn; row.appendChild(b); return b;
       };
       btn(l.visible ? '👁' : '🚫', () => app.toggleLayerVisible(l.id));
-      btn(l.name, () => app.setActiveLayer(l.id), false, 'nm');
+      const nm = btn(l.name, () => { if (swallow) { swallow = false; return; } app.setActiveLayer(l.id); }, false, 'nm');
+      // hold (or double-click) the name to rename
+      const rename = () => {
+        const v = prompt('Layer name', l.name);
+        if (v !== null) app.renameLayer(l.id, v);
+      };
+      let hold = 0, sx = 0, sy = 0;
+      nm.addEventListener('pointerdown', e => {
+        swallow = false; sx = e.clientX; sy = e.clientY; clearTimeout(hold);
+        hold = window.setTimeout(() => { swallow = true; rename(); }, 500);
+      });
+      nm.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 8) clearTimeout(hold); });
+      for (const t of ['pointerup', 'pointercancel', 'pointerleave']) nm.addEventListener(t, () => clearTimeout(hold));
+      nm.addEventListener('dblclick', rename);
+      nm.addEventListener('contextmenu', e => e.preventDefault());
       const r = document.createElement('input'); r.type = 'range'; r.min = '0'; r.max = '100'; r.value = String(Math.round(l.opacity * 100)); r.title = 'Layer opacity';
       r.oninput = () => app.layerOpacityLive(l.id, +r.value / 100);
       r.onpointerdown = () => { sliding = true; };
       r.onchange = () => { sliding = false; app.commitLayerOpacity(); };
       r.onpointerup = () => { sliding = false; };
       row.appendChild(r);
-      btn('▲', () => app.moveLayer(l.id, 1), i === ls.length - 1);
-      btn('▼', () => app.moveLayer(l.id, -1), i === 0);
       btn('🗑', () => app.removeLayer(l.id), ls.length <= 1);
+      const grip = btn('☰', () => {}, ls.length <= 1, 'grip');
+      row.dataset.id = l.id;
+      grip.addEventListener('pointerdown', e => startDrag(e, row, grip));
       llist.appendChild(row);
     });
   }
@@ -180,6 +229,7 @@ export function setupUI(app: App) {
     $('#north').classList.toggle('unlocked', !app.rotLocked);
     $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🧭';
     $('#rotLbl').textContent = 'Rot ' + (app.heading() ?? '–');
+    $('#gridBtn').classList.toggle('toggled', app.grid);
     renderLayers();
   };
   app.onNotify(refresh); refresh();
