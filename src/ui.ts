@@ -26,6 +26,7 @@ export function setupUI(app: App) {
   $('#selBtn').onclick = () => app.selectButton();
   $('#wrapBtn').onclick = () => app.wrapButton();
   $('#gridBtn').onclick = () => app.toggleGrid();
+  $('#shapesBtn').onclick = () => app.shapesButton();
   $('#undo').onclick = () => app.store.undo();
   $('#redo').onclick = () => app.store.redo();
   $('#north').onclick = () => app.unlockRotation();
@@ -50,6 +51,7 @@ export function setupUI(app: App) {
   // ---- long-press tooltips ----
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
+    shapesBtn: 'Shapes: tap to activate, tap again to switch line / rectangle / circle / arrow. Drag on the canvas to draw',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
     styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', imagesBtn: 'Image gallery: upload pictures and add them to the drawing', gridBtn: 'Show or hide the background grid', moreBtn: 'Show or hide the second toolbar row',
   };
@@ -248,10 +250,15 @@ export function setupUI(app: App) {
   }
   $('#addLayer').onclick = () => app.addLayer();
 
+  const SHAPE_ICONS = {
+    line: '<path d="M4 20 20 4"/>', rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
+    circle: '<circle cx="12" cy="12" r="8"/>', arrow: '<path d="M4 20 20 4M9 4h11v11"/>',
+  };
+  const SHAPE_NAMES = { line: 'Line', rect: 'Rect', circle: 'Circle', arrow: 'Arrow' };
   const WL = ['off', 'V', 'H', 'V+H'];
   const refresh = () => {
     document.querySelectorAll<HTMLButtonElement>('#bar button').forEach(b => b.classList.remove('active'));
-    const act = app.toolId === 'select' ? $('#selBtn') : app.toolId === 'wrap' ? $('#wrapBtn') : document.querySelector(`[data-tool=${app.toolId}]`)!;
+    const act = app.toolId === 'select' ? $('#selBtn') : app.toolId === 'wrap' ? $('#wrapBtn') : app.toolId === 'shapes' ? $('#shapesBtn') : document.querySelector(`[data-tool=${app.toolId}]`)!;
     act.classList.add('active');
     $<HTMLButtonElement>('#undo').disabled = !app.store.canUndo;
     $<HTMLButtonElement>('#redo').disabled = !app.store.canRedo;
@@ -270,6 +277,7 @@ export function setupUI(app: App) {
     $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🧭';
     $('#rotLbl').textContent = 'Rot ' + (app.heading() ?? '–');
     $('#gridBtn').classList.toggle('toggled', app.grid);
+    $('#shapeIcon').innerHTML = SHAPE_ICONS[app.shapeKind]; $('#shapeLbl').textContent = SHAPE_NAMES[app.shapeKind];
     renderLayers();
   };
   app.onNotify(refresh); refresh();

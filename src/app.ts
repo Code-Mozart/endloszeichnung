@@ -8,6 +8,7 @@ import { PenTool } from './tools/pen';
 import { EraseTool } from './tools/erase';
 import { SelectTool } from './tools/select';
 import { WrapTool } from './tools/wrap';
+import { SHAPE_KINDS, ShapeKind, ShapeTool } from './tools/shapes';
 import { loadDoc, saveDoc, setLast } from './persist';
 import { thumbnail } from './exporter';
 import { preload } from './images';
@@ -23,6 +24,7 @@ export class App {
   pen = { color: '#1a1a1a', width: 3, alpha: 1 };
   activeLayer = 'l1';
   grid = true;
+  shapeKind: ShapeKind = 'line';
   private opBefore: Layer[] | null = null;
   dpr = 1;
   /** Rotation gesture is locked by default; the rotation button unlocks it briefly. */
@@ -38,7 +40,7 @@ export class App {
   private contentDirty = false;
 
   constructor() {
-    this.tools = { pen: new PenTool(this), erase: new EraseTool(this), select: new SelectTool(this), wrap: new WrapTool() };
+    this.tools = { pen: new PenTool(this), erase: new EraseTool(this), select: new SelectTool(this), wrap: new WrapTool(), shapes: new ShapeTool(this) };
     this.store.onChange(() => {
       for (const id of this.selection) if (!this.store.strokes.has(id)) this.selection.delete(id);
       if (!this.store.layers.some(l => l.id === this.activeLayer)) this.activeLayer = this.store.layers[this.store.layers.length - 1].id;
@@ -91,6 +93,12 @@ export class App {
     const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
     this.selection.clear();
     this.store.apply({ removed, added: [] });
+    this.notify();
+  }
+  /** Shapes button: first tap activates the tool, further taps cycle line / rectangle / circle / arrow. */
+  shapesButton() {
+    if (this.toolId !== 'shapes') return this.setTool('shapes');
+    this.shapeKind = SHAPE_KINDS[(SHAPE_KINDS.indexOf(this.shapeKind) + 1) % SHAPE_KINDS.length];
     this.notify();
   }
   selectButton() {
