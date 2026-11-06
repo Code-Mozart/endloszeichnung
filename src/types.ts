@@ -1,4 +1,6 @@
-export interface Stroke { id: string; type: 'stroke'; pts: number[]; color: string; width: number; alpha?: number; layer?: string }
+export type DashKind = 'solid' | 'dashed' | 'dotted' | 'dashdot' | 'longdash';
+export const DASH_KINDS: DashKind[] = ['solid', 'dashed', 'dotted', 'dashdot', 'longdash'];
+export interface Stroke { id: string; type: 'stroke'; pts: number[]; color: string; width: number; alpha?: number; layer?: string; dash?: DashKind }
 /** A raster image placed in the drawing. `m` maps image pixels (0..iw, 0..ih) to world coordinates. */
 export interface ImageObj { id: string; type: 'image'; img: string; iw: number; ih: number; m: [number, number, number, number, number, number]; alpha?: number; layer?: string }
 export type Obj = Stroke | ImageObj;

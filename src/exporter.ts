@@ -1,6 +1,6 @@
 import type { Layer, Obj } from './types';
 import { groupByLayer, paintLayers, scratchCanvas } from './scene';
-import { pathD, objBB, strokePath, unionBB, BB } from './geom';
+import { dashPattern, pathD, objBB, strokePath, unionBB, BB } from './geom';
 import { getBitmap, preload } from './images';
 import { getImageBlob } from './persist';
 
@@ -24,7 +24,7 @@ export async function toSVG(strokes: Obj[], layers: Layer[]): Promise<string> {
   for (const id of new Set(imageIds(vis))) { const bl = await getImageBlob(id); if (bl) urls.set(id, await blobToDataURL(bl)); }
   const g = groupByLayer(strokes, layers);
   const one = (s: Obj) => s.type === 'stroke'
-    ? `<path d="${pathD(s.pts)}" stroke="${s.color}" stroke-width="${+s.width.toFixed(2)}"${(s.alpha ?? 1) < 0.999 ? ` stroke-opacity="${+(s.alpha ?? 1).toFixed(3)}"` : ''}/>`
+    ? `<path d="${pathD(s.pts)}" stroke="${s.color}" stroke-width="${+s.width.toFixed(2)}"${(s.alpha ?? 1) < 0.999 ? ` stroke-opacity="${+(s.alpha ?? 1).toFixed(3)}"` : ''}${s.dash && s.dash !== 'solid' ? ` stroke-dasharray="${dashPattern(s.dash, s.width).map(v => +v.toFixed(3)).join(' ')}"` : ''}/>`
     : urls.has(s.img) ? `<image href="${urls.get(s.img)}" width="${s.iw}" height="${s.ih}" transform="matrix(${s.m.map(v => +v.toFixed(5)).join(' ')})"${(s.alpha ?? 1) < 0.999 ? ` opacity="${+(s.alpha ?? 1).toFixed(3)}"` : ''}/>` : '';
   const body = layers.filter(l => l.visible && g.get(l.id)?.length).map(l =>
     `<g${l.opacity < 0.999 ? ` opacity="${+l.opacity.toFixed(3)}"` : ''}>\n` + g.get(l.id)!.map(one).join('\n') + '\n</g>').join('\n');
@@ -42,7 +42,7 @@ function raster(strokes: Obj[], layers: Layer[], maxSide: number, bg: string | n
   setup(ctx);
   paintLayers(ctx, layers, groupByLayer(strokes, layers), () => scratchCanvas(c.width, c.height), setup, (x, s) => {
     if (s.type === 'stroke') {
-      x.globalAlpha = s.alpha ?? 1; x.strokeStyle = s.color; x.lineWidth = s.width; x.stroke(strokePath(s)); x.globalAlpha = 1;
+      x.globalAlpha = s.alpha ?? 1; x.setLineDash(dashPattern(s.dash, s.width)); x.strokeStyle = s.color; x.lineWidth = s.width; x.stroke(strokePath(s)); x.globalAlpha = 1; x.setLineDash([]);
     } else {
       const bm = getBitmap(s.img); if (!bm) return;
       x.save(); x.transform(...s.m); x.globalAlpha = s.alpha ?? 1; x.drawImage(bm, 0, 0, s.iw, s.ih); x.restore();

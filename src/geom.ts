@@ -1,4 +1,4 @@
-import type { Obj, Stroke } from './types';
+import type { DashKind, Obj, Stroke } from './types';
 
 /** 2D affine: x' = a x + c y + e ; y' = b x + d y + f */
 export type Mat = [number, number, number, number, number, number];
@@ -86,4 +86,16 @@ export function pointInPoly(x: number, y: number, poly: [number, number][]): boo
     if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
+}
+
+/** Line dash pattern in canvas units. Proportional to the stroke width; accounts for the round caps adding w/2 on each end. */
+export function dashPattern(kind: DashKind | undefined, w: number): number[] {
+  const dot = 0.001;
+  switch (kind) {
+    case 'dashed': return [2.5 * w, 3 * w];
+    case 'dotted': return [dot, 2.2 * w];
+    case 'dashdot': return [3 * w, 2.2 * w, dot, 2.2 * w];
+    case 'longdash': return [6 * w, 3 * w];
+    default: return [];
+  }
 }

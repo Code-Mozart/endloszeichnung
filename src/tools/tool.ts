@@ -1,5 +1,5 @@
 export interface PInfo { sx: number; sy: number; wx: number; wy: number }
-export type ToolId = 'pen' | 'erase' | 'select' | 'wrap' | 'shapes';
+export type ToolId = 'pen' | 'erase' | 'select' | 'shapes';
 /** A tool receives world-space pointer events for a single-pointer gesture. */
 export interface Tool {
   id: ToolId;
