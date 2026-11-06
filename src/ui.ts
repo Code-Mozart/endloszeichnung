@@ -14,7 +14,11 @@ export function setupUI(app: App) {
   const activity = () => { document.body.classList.add('ui-hidden'); $('#style').classList.add('off'); schedule(); };
 
   // ---- toolbar ----
-  document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => b.onclick = () => app.setTool(b.dataset.tool as ToolId));
+  document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => b.onclick = () => {
+    // while something is selected the erase button becomes "delete selected"
+    if (b.dataset.tool === 'erase' && app.toolId === 'select' && app.selection.size) app.deleteSelection();
+    else app.setTool(b.dataset.tool as ToolId);
+  });
   $('#selBtn').onclick = () => app.selectButton();
   $('#wrapBtn').onclick = () => app.wrapButton();
   $('#undo').onclick = () => app.store.undo();
@@ -24,19 +28,18 @@ export function setupUI(app: App) {
 
   // ---- long-press tooltips ----
   const TIPS: Record<string, string> = {
-    pen: 'Pen: draw', erase: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
+    pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
     styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Reset rotation to 0 and unlock rotating for 1s (rotation is locked otherwise)', files: 'Drawings: switch, export',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
   document.querySelectorAll<HTMLButtonElement>('#bar button').forEach(b => {
-    const text = TIPS[b.id || b.dataset.tool || ''];
     const hide = () => { clearTimeout(tipTimer); tip.classList.remove('on'); };
     b.addEventListener('pointerdown', () => {
       tipShown = false; clearTimeout(tipTimer);
       tipTimer = window.setTimeout(() => {
-        tipShown = true; tip.textContent = text;
+        tipShown = true; tip.textContent = b.id === 'eraseBtn' && app.toolId === 'select' && app.selection.size ? 'Delete selected strokes' : TIPS[b.id || b.dataset.tool || ''];
         const r = b.getBoundingClientRect(); tip.classList.add('on');
         const w = tip.offsetWidth;
         tip.style.left = Math.max(6, Math.min(window.innerWidth - w - 6, r.left + r.width / 2 - w / 2)) + 'px';
@@ -96,6 +99,8 @@ export function setupUI(app: App) {
     $<HTMLButtonElement>('#undo').disabled = !app.store.canUndo;
     $<HTMLButtonElement>('#redo').disabled = !app.store.canRedo;
     $('#wrapLbl').textContent = 'Wrap ' + WL[(app.wrap.x ? 1 : 0) + (app.wrap.y ? 2 : 0)];
+    const del = app.toolId === 'select' && app.selection.size > 0;
+    $('#eraseIcon').textContent = del ? '🗑️' : '🧽'; $('#eraseLbl').textContent = del ? 'Delete' : 'Erase';
     const st = app.styleView();
     $('#dot').style.background = st.color;
     if (!dragging && st.color.toLowerCase() !== hex()) { fromHex(st.color); paintPicker(); }
