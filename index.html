@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Endloszeichnung</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="style" class="ui pop off">
+    <div id="swatches"></div>
+    <label class="row">Color <input type="color" id="color" /></label>
+    <label class="row">Width <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
+  </div>
+
+  <nav id="bar" class="ui">
+    <button data-tool="pen"><i>✏️</i><span>Pen</span></button>
+    <button data-tool="erase"><i>🧽</i><span>Erase</span></button>
+    <button id="selBtn"><i>➰</i><span>Select</span></button>
+    <button id="wrapBtn"><i>🔁</i><span id="wrapLbl">Wrap</span></button>
+    <button id="styleBtn"><i><u id="dot"></u></i><span>Style</span></button>
+    <button id="undo"><i>↶</i><span>Undo</span></button>
+    <button id="redo"><i>↷</i><span>Redo</span></button>
+    <button id="north"><i>🧭</i><span>Rot 0</span></button>
+    <button id="files"><i>🗂</i><span>Files</span></button>
+  </nav>
+
+  <div id="gal" class="off">
+    <header><b>Drawings</b><button id="newDoc">＋ New</button><button id="closeGal">✕</button></header>
+    <div id="list"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
