@@ -32,3 +32,6 @@ body.ui-hidden .ui { opacity:0; pointer-events:none; transform:translateY(8px); 
 .card .meta b { font-size:14px; color:#111; }
 .card .btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
 .card .btns button { padding:6px 9px; font-size:12px; }
+#tip { position:fixed; z-index:20; max-width:240px; padding:6px 10px; border-radius:8px; background:rgba(30,30,35,.95); color:#fff; font-size:12px; pointer-events:none; opacity:0; transition:opacity .12s; }
+#tip.on { opacity:1; }
+body.ui-hidden #tip { opacity:0; }
