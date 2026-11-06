@@ -19,14 +19,14 @@ export function setupUI(app: App) {
   $('#wrapBtn').onclick = () => app.wrapButton();
   $('#undo').onclick = () => app.store.undo();
   $('#redo').onclick = () => app.store.redo();
-  $('#north').onclick = () => { app.view.cam.rot = 0; app.cameraChanged(); };
+  $('#north').onclick = () => app.unlockRotation();
   $('#styleBtn').onclick = () => $('#style').classList.toggle('off');
 
   // ---- long-press tooltips ----
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', erase: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
-    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Reset view rotation', files: 'Drawings: switch, export',
+    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Reset rotation to 0 and unlock rotating for 1s (rotation is locked otherwise)', files: 'Drawings: switch, export',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
@@ -52,10 +52,40 @@ export function setupUI(app: App) {
   // ---- style popover ----
   const sw = $('#swatches');
   SWATCHES.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle({ color: c }, true); sw.appendChild(b); });
-  const color = $<HTMLInputElement>('#color'), width = $<HTMLInputElement>('#width');
-  color.oninput = () => app.setStyle({ color: color.value }, false);
-  color.onchange = () => app.setStyle({ color: color.value }, true);
-  width.oninput = () => { app.setStyle({ width: +width.value }, false); $('#wval').textContent = width.value; };
+  const more = document.createElement('b'); more.className = 'more'; more.title = 'More colors';
+  more.onclick = () => $('#picker').classList.toggle('off'); sw.appendChild(more);
+
+  // HSV color picker (saturation/value square + hue slider)
+  let hsv = { h: 0, s: 0, v: 0 }, dragging = false;
+  const sv = $('#sv'), svc = $('#svc'), hue = $<HTMLInputElement>('#hue'), width = $<HTMLInputElement>('#width');
+  const hex = () => {
+    const { h, s: sa, v } = hsv, f = (n: number) => { const k = (n + h / 60) % 6; return v - v * sa * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+  };
+  const fromHex = (c: string) => {
+    const r = parseInt(c.slice(1, 3), 16) / 255, g = parseInt(c.slice(3, 5), 16) / 255, b = parseInt(c.slice(5, 7), 16) / 255;
+    const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+    let h = d === 0 ? hsv.h : mx === r ? ((g - b) / d + 6) % 6 * 60 : mx === g ? ((b - r) / d + 2) * 60 : ((r - g) / d + 4) * 60;
+    hsv = { h, s: mx ? d / mx : 0, v: mx };
+  };
+  const paintPicker = () => {
+    sv.style.setProperty('--h', String(hsv.h));
+    svc.style.left = hsv.s * 100 + '%'; svc.style.top = (1 - hsv.v) * 100 + '%';
+    hue.value = String(Math.round(hsv.h));
+  };
+  const pick = (commit: boolean) => { paintPicker(); app.setStyle({ color: hex() }, commit); };
+  const svMove = (e: PointerEvent) => {
+    const r = sv.getBoundingClientRect();
+    hsv.s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); hsv.v = 1 - Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    pick(false);
+  };
+  sv.addEventListener('pointerdown', e => { dragging = true; sv.setPointerCapture(e.pointerId); svMove(e); });
+  sv.addEventListener('pointermove', e => { if (dragging) svMove(e); });
+  sv.addEventListener('pointerup', () => { if (dragging) { dragging = false; pick(true); } });
+  sv.addEventListener('pointercancel', () => { dragging = false; });
+  hue.oninput = () => { hsv.h = +hue.value; pick(false); };
+  hue.onchange = () => pick(true);
+  width.oninput = () => { app.setStyle({ width: +width.value }, false); $('#wval').textContent = (+width.value).toFixed(1); };
   width.onchange = () => app.setStyle({ width: +width.value }, true);
 
   const WL = ['off', 'V', 'H', 'V+H'];
@@ -68,9 +98,11 @@ export function setupUI(app: App) {
     $('#wrapLbl').textContent = 'Wrap ' + WL[(app.wrap.x ? 1 : 0) + (app.wrap.y ? 2 : 0)];
     const st = app.styleView();
     $('#dot').style.background = st.color;
-    if (document.activeElement !== color) color.value = st.color;
+    if (!dragging && st.color.toLowerCase() !== hex()) { fromHex(st.color); paintPicker(); }
     if (document.activeElement !== width) { width.value = String(st.width); }
-    $('#wval').textContent = String(+st.width.toFixed(1));
+    $('#wval').textContent = st.width.toFixed(1);
+    $('#north').classList.toggle('unlocked', !app.rotLocked);
+    $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🔓';
   };
   app.onNotify(refresh); refresh();
 

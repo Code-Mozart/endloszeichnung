@@ -22,7 +22,7 @@ export function attachGestures(canvas: HTMLCanvasElement, app: App, activity: ()
       toolPtr = e.pointerId; app.activeTool().down(info(e.clientX, e.clientY));
     } else if (ptrs.size >= 2 && e.pointerType === 'touch') {
       if (toolPtr !== null) { app.activeTool().cancel(); toolPtr = null; }
-      locked = true;
+      locked = true; app.navActive = true;
       const t = two();
       nav = { aw: view.toWorld(t.mx, t.my), z0: view.cam.zoom, r0: view.cam.rot, d0: t.d, a0: t.ang };
     }
@@ -32,7 +32,9 @@ export function attachGestures(canvas: HTMLCanvasElement, app: App, activity: ()
     p.x = e.clientX; p.y = e.clientY; activity();
     if (nav && ptrs.size >= 2) {
       const t = two();
-      view.cam.zoom = nav.z0 * (t.d / nav.d0); view.cam.rot = nav.r0 + (t.ang - nav.a0); view.clamp();
+      view.cam.zoom = nav.z0 * (t.d / nav.d0);
+      if (!app.rotLocked) view.cam.rot = nav.r0 + (t.ang - nav.a0);
+      view.clamp();
       view.anchor(nav.aw, t.mx, t.my); app.cameraChanged();
     } else if (e.pointerId === toolPtr) {
       const evs = e.getCoalescedEvents?.() ?? [];
@@ -46,7 +48,7 @@ export function attachGestures(canvas: HTMLCanvasElement, app: App, activity: ()
       toolPtr = null;
       if (cancelled) app.activeTool().cancel(); else app.activeTool().up(info(e.clientX, e.clientY));
     }
-    if (ptrs.size < 2) nav = null;
+    if (ptrs.size < 2 && nav) { nav = null; app.navActive = false; app.lockRotation(); }
     if (ptrs.size === 0) locked = false;
   };
   canvas.addEventListener('pointerup', e => end(e, false));

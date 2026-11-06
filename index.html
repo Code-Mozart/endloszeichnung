@@ -15,7 +15,10 @@
 
   <div id="style" class="ui pop off">
     <div id="swatches"></div>
-    <label class="row">Color <input type="color" id="color" /></label>
+    <div id="picker" class="off">
+      <div id="sv"><div id="svc"></div></div>
+      <input type="range" id="hue" min="0" max="360" step="1" />
+    </div>
     <label class="row">Width <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
   </div>
 
@@ -27,7 +30,7 @@
     <button id="styleBtn"><i><u id="dot"></u></i><span>Style</span></button>
     <button id="undo"><i>↶</i><span>Undo</span></button>
     <button id="redo"><i>↷</i><span>Redo</span></button>
-    <button id="north"><i>🧭</i><span>Rot 0</span></button>
+    <button id="north"><i id="rotIcon">🔒</i><span>Rot 0</span></button>
     <button id="files"><i>🗂</i><span>Files</span></button>
   </nav>
 
