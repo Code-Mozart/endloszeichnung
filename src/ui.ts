@@ -55,6 +55,24 @@ export function setupUI(app: App) {
   // ---- style popover ----
   const sw = $('#swatches');
   SWATCHES.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle({ color: c }, true); sw.appendChild(b); });
+  // recently used custom colors (persisted per device)
+  const RECENT_N = 8, RKEY = 'recentColors';
+  let recent: string[] = [];
+  try { recent = (JSON.parse(localStorage.getItem(RKEY) || '[]') as string[]).filter(c => /^#[0-9a-f]{6}$/i.test(c)).slice(0, RECENT_N); } catch { /* ignore */ }
+  const rec = $('#recent');
+  const paintRecent = () => {
+    rec.innerHTML = ''; rec.classList.toggle('off', !recent.length);
+    recent.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle({ color: c }, true); rec.appendChild(b); });
+  };
+  const remember = (c: string) => {
+    c = c.toLowerCase();
+    if (SWATCHES.includes(c) || recent[0] === c) return;
+    recent = [c, ...recent.filter(x => x !== c)].slice(0, RECENT_N); paintRecent();
+    try { localStorage.setItem(RKEY, JSON.stringify(recent)); } catch { /* ignore */ }
+  };
+  let rememberTimer = 0; // a color counts once the user stops fiddling for a moment
+  const rememberSoon = (c: string) => { clearTimeout(rememberTimer); rememberTimer = window.setTimeout(() => remember(c), 1200); };
+  paintRecent();
   const more = document.createElement('b'); more.className = 'more'; more.title = 'More colors';
   more.onclick = () => $('#picker').classList.toggle('off'); sw.appendChild(more);
 
@@ -76,7 +94,7 @@ export function setupUI(app: App) {
     svc.style.left = hsv.s * 100 + '%'; svc.style.top = (1 - hsv.v) * 100 + '%';
     hue.value = String(Math.round(hsv.h));
   };
-  const pick = (commit: boolean) => { paintPicker(); app.setStyle({ color: hex() }, commit); };
+  const pick = (commit: boolean) => { paintPicker(); app.setStyle({ color: hex() }, commit); if (commit) rememberSoon(hex()); };
   const svMove = (e: PointerEvent) => {
     const r = sv.getBoundingClientRect();
     hsv.s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); hsv.v = 1 - Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
