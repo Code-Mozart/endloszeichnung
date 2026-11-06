@@ -7,10 +7,10 @@ const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const SWATCHES = ['#1a1a1a', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#ffffff'];
 
 export function setupUI(app: App) {
-  // ---- auto-hide: hide on any canvas interaction, return after 0.6s idle ----
+  // ---- auto-hide: hide on any canvas interaction, return after 0.3s idle ----
   let timer = 0, held = 0;
   const show = () => { if (held > 0) return schedule(); document.body.classList.remove('ui-hidden'); };
-  const schedule = () => { clearTimeout(timer); timer = window.setTimeout(show, 600); };
+  const schedule = () => { clearTimeout(timer); timer = window.setTimeout(show, 300); };
   const activity = () => { document.body.classList.add('ui-hidden'); $('#style').classList.add('off'); schedule(); };
 
   // ---- toolbar ----
