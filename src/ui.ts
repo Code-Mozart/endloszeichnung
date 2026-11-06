@@ -30,7 +30,7 @@ export function setupUI(app: App) {
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
-    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Reset rotation to 0 and unlock rotating for 1s (rotation is locked otherwise)', files: 'Drawings: switch, export',
+    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
@@ -107,7 +107,8 @@ export function setupUI(app: App) {
     if (document.activeElement !== width) { width.value = String(st.width); }
     $('#wval').textContent = st.width.toFixed(1);
     $('#north').classList.toggle('unlocked', !app.rotLocked);
-    $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🔓';
+    $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🧭';
+    $('#rotLbl').textContent = 'Rot ' + (app.heading() ?? '–');
   };
   app.onNotify(refresh); refresh();
 

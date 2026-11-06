@@ -1,8 +1,18 @@
 import { defineConfig } from 'vite';
+import { execSync } from 'node:child_process';
+
+/** Version = PR number, taken from the merge commit subject ("Merge pull request #7 ..." or "... (#7)"). */
+function version(): string {
+  try {
+    const m = execSync('git log -1 --format=%s').toString().match(/#(\d+)/);
+    return m ? m[1] : 'dev';
+  } catch { return 'dev'; }
+}
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(version()) },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
