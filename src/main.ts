@@ -23,6 +23,9 @@ const flushNow = () => { void app.flush(); };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
 window.addEventListener('pagehide', flushNow);
 
+// keep the browser from evicting drawings under storage pressure (best effort)
+navigator.storage?.persist?.().catch(() => {});
+
 (async () => {
   const id = await getLast();
   const d = id ? await loadDoc(id) : undefined;
