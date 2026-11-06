@@ -72,6 +72,12 @@ export class App {
     this.wrap = { x: n === 1 || n === 3, y: n === 2 || n === 3 };
     this.cameraChanged(); this.notify();
   }
+  deleteSelection() {
+    const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
+    this.selection.clear();
+    this.store.apply({ removed, added: [] });
+    this.notify();
+  }
   selectButton() {
     if (this.toolId === 'select') { this.selection.clear(); this.requestRender(); this.notify(); } else this.setTool('select');
   }
