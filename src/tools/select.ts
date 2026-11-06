@@ -91,7 +91,7 @@ export class SelectTool implements Tool {
         const cy = this.lasso.reduce((a, q) => a + q[1], 0) / this.lasso.length;
         app.selection = new Set();
         for (const s of app.store.strokes.values()) {
-          if (!app.store.isVisible(s)) continue;
+          if (app.store.layerOf(s) !== app.activeLayer || !app.store.isVisible(s)) continue; // select only on the active layer
           // strokes: any node inside the lasso; images: any corner or the center
           let pts: number[] = s.type === 'stroke' ? s.pts : imageCorners(s).flatMap(c => c);
           if (s.type === 'image') { const c = imageCorners(s); pts = [...pts, (c[0][0] + c[2][0]) / 2, (c[0][1] + c[2][1]) / 2]; }

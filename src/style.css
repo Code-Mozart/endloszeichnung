@@ -86,3 +86,7 @@ body.ui-hidden #tip { opacity:0; }
 .ithumb img { width:100%; height:100%; object-fit:contain; display:block; pointer-events:none; }
 .ithumb button { position:absolute; top:3px; right:3px; min-height:30px !important; min-width:30px !important; padding:0 !important; border-radius:50% !important; background:rgba(255,255,255,.9) !important; box-shadow:0 1px 4px rgba(0,0,0,.35); }
 #images .hint { margin-top:8px; font-size:11px; color:#777; }
+#dashes { display:flex; gap:6px; flex:1; }
+#dashes button { flex:1; height:36px; border:2px solid #ccc; background:#fff; border-radius:8px; color:#333; padding:0; }
+#dashes button.on { border-color:var(--ac); background:#e6efff; }
+#dashes svg { width:100%; height:12px; }

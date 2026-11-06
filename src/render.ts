@@ -1,6 +1,6 @@
 import type { App } from './app';
 import { PERIOD as P, Obj } from './types';
-import { imageCorners, objBB, strokePath } from './geom';
+import { dashPattern, imageCorners, objBB, strokePath } from './geom';
 import { getBitmap } from './images';
 import { groupByLayer, paintLayers, scratchCanvas } from './scene';
 
@@ -43,8 +43,8 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       c.save(); c.translate(i * P, j * P);
       if (s.type === 'stroke') {
-        if (sel) { c.globalAlpha = 1; c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path!); }
-        c.globalAlpha = s.alpha ?? 1; c.strokeStyle = s.color; c.lineWidth = s.width; c.stroke(path!);
+        if (sel) { c.globalAlpha = 1; c.setLineDash([]); c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path!); }
+        c.globalAlpha = s.alpha ?? 1; c.setLineDash(dashPattern(s.dash, s.width)); c.strokeStyle = s.color; c.lineWidth = s.width; c.stroke(path!);
       } else {
         if (bmp) { c.save(); c.transform(...s.m); c.globalAlpha = s.alpha ?? 1; c.imageSmoothingQuality = 'high'; c.drawImage(bmp, 0, 0, s.iw, s.ih); c.restore(); }
         if (sel || !bmp) {

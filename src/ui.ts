@@ -3,7 +3,9 @@ import type { ToolId } from './tools/tool';
 import { deleteDoc, deleteImageBlob, imageStillUsed, listGallery, listMetas, loadDoc, putImage, removeGalleryEntry } from './persist';
 import { decodeFile, forget } from './images';
 import { download, toBlob, toSVG } from './exporter';
-import { Layer, defaultLayers } from './types';
+import { DASH_KINDS, DashKind, Layer, defaultLayers } from './types';
+import { dashPattern } from './geom';
+import type { ShapeKind } from './tools/shapes';
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const SWATCHES = ['#1a1a1a', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#ffffff'];
@@ -26,7 +28,10 @@ export function setupUI(app: App) {
   $('#selBtn').onclick = () => app.selectButton();
   $('#wrapBtn').onclick = () => app.wrapButton();
   $('#gridBtn').onclick = () => app.toggleGrid();
-  $('#shapesBtn').onclick = () => app.shapesButton();
+  document.querySelectorAll<HTMLButtonElement>('[data-shape]').forEach(b => b.onclick = () => app.shapeButton(b.dataset.shape as ShapeKind));
+  $('#cutBtn').onclick = () => app.cutSelection();
+  $('#copyBtn').onclick = () => app.copySelection();
+  $('#pasteBtn').onclick = () => app.pasteClipboard();
   $('#undo').onclick = () => app.store.undo();
   $('#redo').onclick = () => app.store.redo();
   $('#north').onclick = () => app.unlockRotation();
@@ -34,10 +39,10 @@ export function setupUI(app: App) {
   $('#layersBtn').onclick = () => { togglePop('#layers'); renderLayers(); };
   $('#imagesBtn').onclick = () => { if (!togglePop('#images')) renderGallery(); };
 
-  // ---- second toolbar row (persisted per device) ----
+  // ---- second and third toolbar rows, toggled together (persisted per device) ----
   const row2 = $('#row2'), bar = $('#bar');
   const setRow2 = (open: boolean) => {
-    row2.classList.toggle('off', !open);
+    row2.classList.toggle('off', !open); $('#row3').classList.toggle('off', !open);
     $('#moreArrow').innerHTML = open ? '<path d="m6 9 6 6 6-6"/>' : '<path d="m6 15 6-6 6 6"/>';
     $('#moreLbl').textContent = open ? 'Less' : 'More';
     try { localStorage.setItem('bar2', open ? '1' : '0'); } catch { /* ignore */ }
@@ -51,8 +56,9 @@ export function setupUI(app: App) {
   // ---- long-press tooltips ----
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
-    shapesBtn: 'Shapes: tap to activate, tap again to switch line / rectangle / circle / arrow. Drag on the canvas to draw',
-    wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
+    arrowBtn: 'Arrow: drag to draw', lineBtn: 'Line: drag to draw', circleBtn: 'Circle: drag from the center to the edge', rectBtn: 'Rectangle: drag between two corners',
+    cutBtn: 'Cut the selected objects', copyBtn: 'Copy the selected objects', pasteBtn: 'Paste into the active layer and select',
+    wrapBtn: 'Wrap: tap to cycle none / vertical / horizontal / both',
     styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', imagesBtn: 'Image gallery: upload pictures and add them to the drawing', gridBtn: 'Show or hide the background grid', moreBtn: 'Show or hide the second toolbar row',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
@@ -250,15 +256,19 @@ export function setupUI(app: App) {
   }
   $('#addLayer').onclick = () => app.addLayer();
 
-  const SHAPE_ICONS = {
-    line: '<path d="M4 20 20 4"/>', rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
-    circle: '<circle cx="12" cy="12" r="8"/>', arrow: '<path d="M4 20 20 4M9 4h11v11"/>',
-  };
-  const SHAPE_NAMES = { line: 'Line', rect: 'Rect', circle: 'Circle', arrow: 'Arrow' };
+  // line style (solid, dashed, dotted, ...)
+  const DASH_NAMES: Record<DashKind, string> = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', dashdot: 'Dash-dot', longdash: 'Long dash' };
+  const dashes = $('#dashes');
+  for (const k of DASH_KINDS) {
+    const b = document.createElement('button'); b.dataset.dash = k; b.title = DASH_NAMES[k];
+    b.innerHTML = `<svg viewBox="0 0 60 12"><line x1="6" y1="6" x2="54" y2="6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="${dashPattern(k, 3).join(' ')}"/></svg>`;
+    b.onclick = () => app.setStyle({ dash: k }, true);
+    dashes.appendChild(b);
+  }
   const WL = ['off', 'V', 'H', 'V+H'];
   const refresh = () => {
     document.querySelectorAll<HTMLButtonElement>('#bar button').forEach(b => b.classList.remove('active'));
-    const act = app.toolId === 'select' ? $('#selBtn') : app.toolId === 'wrap' ? $('#wrapBtn') : app.toolId === 'shapes' ? $('#shapesBtn') : document.querySelector(`[data-tool=${app.toolId}]`)!;
+    const act = app.toolId === 'select' ? $('#selBtn') : app.toolId === 'shapes' ? document.querySelector(`[data-shape=${app.shapeKind}]`)! : document.querySelector(`[data-tool=${app.toolId}]`)!;
     act.classList.add('active');
     $<HTMLButtonElement>('#undo').disabled = !app.store.canUndo;
     $<HTMLButtonElement>('#redo').disabled = !app.store.canRedo;
@@ -277,7 +287,11 @@ export function setupUI(app: App) {
     $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🧭';
     $('#rotLbl').textContent = 'Rot ' + (app.heading() ?? '–');
     $('#gridBtn').classList.toggle('toggled', app.grid);
-    $('#shapeIcon').innerHTML = SHAPE_ICONS[app.shapeKind]; $('#shapeLbl').textContent = SHAPE_NAMES[app.shapeKind];
+    $('#wrapBtn').classList.toggle('toggled', app.wrap.x || app.wrap.y);
+    const hasSel = app.toolId === 'select' && app.selection.size > 0;
+    $<HTMLButtonElement>('#cutBtn').disabled = !hasSel; $<HTMLButtonElement>('#copyBtn').disabled = !hasSel;
+    $<HTMLButtonElement>('#pasteBtn').disabled = !app.clipboard.length;
+    document.querySelectorAll<HTMLButtonElement>('#dashes button').forEach(b => b.classList.toggle('on', b.dataset.dash === (app.styleView().dash ?? 'solid')));
     renderLayers();
   };
   app.onNotify(refresh); refresh();
