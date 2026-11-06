@@ -76,3 +76,13 @@ body.ui-hidden #tip { opacity:0; }
 #lhint { margin-top:8px; font-size:11px; color:#777; }
 .lrow .grip { touch-action:none; cursor:grab; font-size:18px; color:#666; }
 .lrow.drag { position:relative; z-index:5; box-shadow:0 4px 14px rgba(0,0,0,.3); opacity:.95; transition:none; }
+#images header { display:flex; align-items:center; margin-bottom:8px; }
+#images header b { flex:1; font-size:15px; }
+#images button { border:0; background:#e8e8ee; border-radius:8px; padding:0 10px; min-height:36px; min-width:36px; font:inherit; color:inherit; }
+#igrid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-height:45vh; overflow:auto; }
+#igrid .empty { grid-column:1/-1; color:#777; font-size:13px; padding:14px 0; text-align:center; }
+.ithumb { position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; border:1px solid #ccc; cursor:pointer;
+  background:repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0/14px 14px; }
+.ithumb img { width:100%; height:100%; object-fit:contain; display:block; pointer-events:none; }
+.ithumb button { position:absolute; top:3px; right:3px; min-height:30px !important; min-width:30px !important; padding:0 !important; border-radius:50% !important; background:rgba(255,255,255,.9) !important; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+#images .hint { margin-top:8px; font-size:11px; color:#777; }

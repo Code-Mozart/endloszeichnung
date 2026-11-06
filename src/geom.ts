@@ -1,4 +1,4 @@
-import type { Stroke } from './types';
+import type { Obj, Stroke } from './types';
 
 /** 2D affine: x' = a x + c y + e ; y' = b x + d y + f */
 export type Mat = [number, number, number, number, number, number];
@@ -21,16 +21,32 @@ export function transformStroke(s: Stroke, m: Mat): Stroke {
   return { ...s, pts, width: s.width * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) };
 }
 
+/** Transform a stroke or image by an affine matrix (images just compose the matrix). */
+export function transformObj(o: Obj, m: Mat): Obj {
+  return o.type === 'stroke' ? transformStroke(o, m) : { ...o, m: mul(m, o.m) };
+}
+
+/** World-space corners of an image (TL, TR, BR, BL). */
+export function imageCorners(o: { iw: number; ih: number; m: Mat }): [number, number][] {
+  const { iw, ih, m } = o;
+  return ([[0, 0], [iw, 0], [iw, ih], [0, ih]] as [number, number][]).map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]);
+}
+
 export interface BB { minX: number; minY: number; maxX: number; maxY: number }
-const bbCache = new WeakMap<Stroke, BB>();
+const bbCache = new WeakMap<Obj, BB>();
 const pathCache = new WeakMap<Stroke, Path2D>();
 
 /** Call after mutating a stroke in place. */
 export function invalidate(s: Stroke) { bbCache.delete(s); pathCache.delete(s); }
 
-export function strokeBB(s: Stroke): BB {
+export function objBB(s: Obj): BB {
   let b = bbCache.get(s);
-  if (!b) {
+  if (!b && s.type === 'image') {
+    const c = imageCorners(s);
+    b = { minX: Math.min(...c.map(p => p[0])), maxX: Math.max(...c.map(p => p[0])), minY: Math.min(...c.map(p => p[1])), maxY: Math.max(...c.map(p => p[1])) };
+    bbCache.set(s, b);
+  }
+  if (!b && s.type === 'stroke') {
     b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
     for (let i = 0; i < s.pts.length; i += 2) {
       b.minX = Math.min(b.minX, s.pts[i]); b.maxX = Math.max(b.maxX, s.pts[i]);
@@ -40,7 +56,7 @@ export function strokeBB(s: Stroke): BB {
     b.minX -= h; b.minY -= h; b.maxX += h; b.maxY += h;
     bbCache.set(s, b);
   }
-  return b;
+  return b!;
 }
 export const unionBB = (a: BB | null, b: BB): BB => a
   ? { minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY), maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY) }

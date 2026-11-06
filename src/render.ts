@@ -1,6 +1,7 @@
 import type { App } from './app';
-import { PERIOD as P, Stroke } from './types';
-import { strokeBB, strokePath } from './geom';
+import { PERIOD as P, Obj } from './types';
+import { imageCorners, objBB, strokePath } from './geom';
+import { getBitmap } from './images';
 import { groupByLayer, paintLayers, scratchCanvas } from './scene';
 
 function rng(min: number, max: number, vmin: number, vmax: number, wrap: boolean): [number, number] {
@@ -34,14 +35,23 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
     c.lineCap = 'round'; c.lineJoin = 'round';
   };
   setup(ctx);
-  const drawOne = (c: CanvasRenderingContext2D, s: Stroke) => {
-    const bb = strokeBB(s), sel = app.selection.has(s.id), path = strokePath(s);
+  const drawOne = (c: CanvasRenderingContext2D, s: Obj) => {
+    const bb = objBB(s), sel = app.selection.has(s.id);
+    const path = s.type === 'stroke' ? strokePath(s) : null, bmp = s.type === 'image' ? getBitmap(s.img) : null;
     const [i0, i1] = rng(bb.minX, bb.maxX, vb.minX, vb.maxX, wrap.x);
     const [j0, j1] = rng(bb.minY, bb.maxY, vb.minY, vb.maxY, wrap.y);
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       c.save(); c.translate(i * P, j * P);
-      if (sel) { c.globalAlpha = 1; c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path); }
-      c.globalAlpha = s.alpha ?? 1; c.strokeStyle = s.color; c.lineWidth = s.width; c.stroke(path);
+      if (s.type === 'stroke') {
+        if (sel) { c.globalAlpha = 1; c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path!); }
+        c.globalAlpha = s.alpha ?? 1; c.strokeStyle = s.color; c.lineWidth = s.width; c.stroke(path!);
+      } else {
+        if (bmp) { c.save(); c.transform(...s.m); c.globalAlpha = s.alpha ?? 1; c.imageSmoothingQuality = 'high'; c.drawImage(bmp, 0, 0, s.iw, s.ih); c.restore(); }
+        if (sel || !bmp) {
+          const q = imageCorners(s); c.globalAlpha = 1; c.beginPath(); q.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath();
+          c.strokeStyle = sel ? 'rgba(41,121,255,.7)' : 'rgba(0,0,0,.25)'; c.lineWidth = 3 / zoom; c.stroke();
+        }
+      }
       c.restore();
     }
   };

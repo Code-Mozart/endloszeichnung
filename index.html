@@ -24,6 +24,13 @@
     <label class="row"><span class="lbl">Opacity</span> <input type="range" id="alpha" min="1" max="100" step="1" /> <b id="aval"></b></label>
   </div>
 
+  <div id="images" class="ui pop off">
+    <header><b>Images</b><button id="upload">＋ Upload</button></header>
+    <div id="igrid"></div>
+    <div class="hint">Tap an image: add to the active layer · ✕: remove from gallery</div>
+    <input type="file" id="file" accept="image/*" multiple hidden />
+  </div>
+
   <div id="layers" class="ui pop off">
     <header><b>Layers</b><button id="addLayer">＋ Add layer</button></header>
     <div id="llist"></div>
@@ -35,6 +42,7 @@
       <button id="north"><i id="rotIcon">🔒</i><span id="rotLbl">Rot N</span></button>
       <button id="wrapBtn"><i>🔁</i><span id="wrapLbl">Wrap</span></button>
       <button id="gridBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></i><span>Grid</span></button>
+      <button id="imagesBtn"><i>🖼️</i><span>Images</span></button>
       <button id="layersBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></svg></i><span>Layers</span></button>
       <button id="files"><i>🗂</i><span>Files</span></button>
     </div>

@@ -1,6 +1,6 @@
 import type { App } from '../app';
-import { PERIOD as P, Stroke } from '../types';
-import { BB, Mat, about, pointInPoly, rotateM, scaleM, strokeBB, transformStroke, translateM, unionBB } from '../geom';
+import { PERIOD as P, Obj } from '../types';
+import { BB, Mat, about, pointInPoly, rotateM, scaleM, objBB, transformObj, translateM, unionBB, imageCorners } from '../geom';
 import type { PInfo, Tool } from './tool';
 
 interface Handle { sx: number; sy: number; rot: boolean; x: number; y: number }
@@ -11,7 +11,7 @@ export class SelectTool implements Tool {
   private mode: 'idle' | 'lasso' | 'move' | 'scale' | 'rotate' = 'idle';
   private lasso: [number, number][] = [];
   private start: PInfo | null = null;
-  private orig: Stroke[] = [];
+  private orig: Obj[] = [];
   private pivot: [number, number] = [0, 0];
   private handle: Handle | null = null;
   private moved = false;
@@ -21,7 +21,7 @@ export class SelectTool implements Tool {
     let b: BB | null = null;
     for (const id of this.app.selection) {
       const s = this.app.preview.get(id) ?? this.app.store.strokes.get(id);
-      if (s) b = unionBB(b, strokeBB(s));
+      if (s) b = unionBB(b, objBB(s));
     }
     return b;
   }
@@ -79,7 +79,7 @@ export class SelectTool implements Tool {
       else sy = cl(ry / (hy || 1));
       m = about(px, py, scaleM(sx, sy));
     }
-    this.app.preview = new Map(this.orig.map(s => [s.id, transformStroke(s, m)]));
+    this.app.preview = new Map(this.orig.map(s => [s.id, transformObj(s, m)]));
     this.app.requestRender();
   }
   up(_p: PInfo) {
@@ -92,8 +92,11 @@ export class SelectTool implements Tool {
         app.selection = new Set();
         for (const s of app.store.strokes.values()) {
           if (!app.store.isVisible(s)) continue;
-          for (let i = 0; i < s.pts.length; i += 2) {
-            let x = s.pts[i], y = s.pts[i + 1];
+          // strokes: any node inside the lasso; images: any corner or the center
+          let pts: number[] = s.type === 'stroke' ? s.pts : imageCorners(s).flatMap(c => c);
+          if (s.type === 'image') { const c = imageCorners(s); pts = [...pts, (c[0][0] + c[2][0]) / 2, (c[0][1] + c[2][1]) / 2]; }
+          for (let i = 0; i < pts.length; i += 2) {
+            let x = pts[i], y = pts[i + 1];
             if (app.wrap.x) x += P * Math.round((cx - x) / P);
             if (app.wrap.y) y += P * Math.round((cy - y) / P);
             if (pointInPoly(x, y, this.lasso)) { app.selection.add(s.id); break; }

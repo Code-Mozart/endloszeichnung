@@ -1,8 +1,8 @@
-import type { Layer, Stroke } from './types';
+import type { Layer, Obj } from './types';
 
 /** Group strokes by layer (unknown layers fall back to the bottom layer), keeping insertion order. */
-export function groupByLayer(strokes: Iterable<Stroke>, layers: Layer[]): Map<string, Stroke[]> {
-  const ids = new Set(layers.map(l => l.id)), out = new Map<string, Stroke[]>();
+export function groupByLayer(strokes: Iterable<Obj>, layers: Layer[]): Map<string, Obj[]> {
+  const ids = new Set(layers.map(l => l.id)), out = new Map<string, Obj[]>();
   for (const s of strokes) {
     const id = s.layer && ids.has(s.layer) ? s.layer : layers[0].id;
     let a = out.get(id); if (!a) out.set(id, (a = []));
@@ -16,9 +16,9 @@ export function groupByLayer(strokes: Iterable<Stroke>, layers: Layer[]): Map<st
  * so overlapping strokes inside one layer don't double-blend, then composited with the layer opacity.
  */
 export function paintLayers(
-  ctx: CanvasRenderingContext2D, layers: Layer[], groups: Map<string, Stroke[]>,
+  ctx: CanvasRenderingContext2D, layers: Layer[], groups: Map<string, Obj[]>,
   getScratch: () => HTMLCanvasElement, setup: (c: CanvasRenderingContext2D) => void,
-  drawOne: (c: CanvasRenderingContext2D, s: Stroke) => void,
+  drawOne: (c: CanvasRenderingContext2D, s: Obj) => void,
 ) {
   for (const l of layers) {
     const g = groups.get(l.id);

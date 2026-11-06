@@ -2,6 +2,7 @@ import { App } from './app';
 import { attachGestures } from './gestures';
 import { setupUI } from './ui';
 import { getLast, loadDoc } from './persist';
+import { setImageLoadedHandler } from './images';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const app = new App();
@@ -16,6 +17,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+setImageLoadedHandler(() => app.requestRender());
 const { activity } = setupUI(app);
 attachGestures(canvas, app, activity);
 

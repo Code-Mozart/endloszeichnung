@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { PERIOD as P, Stroke, uid } from '../types';
-import { strokeBB } from '../geom';
+import { objBB } from '../geom';
 import { DiffBuilder } from '../store';
 import type { PInfo, Tool } from './tool';
 
@@ -51,8 +51,9 @@ export class EraseTool implements Tool {
     const { store, wrap } = this.app, r = this.radius();
     const rm: Stroke[] = [], add: Stroke[] = [];
     for (const s of [...store.strokes.values()]) {
+      if (s.type !== 'stroke') continue; // images are removed with select + delete, not erased
       if (store.layerOf(s) !== this.app.activeLayer || !store.isVisible(s)) continue; // erase only on the active layer
-      const bb = strokeBB(s);
+      const bb = objBB(s);
       if (!wrap.x && (x < bb.minX - r || x > bb.maxX + r)) continue;
       if (!wrap.y && (y < bb.minY - r || y > bb.maxY + r)) continue;
       const res = eraseStroke(s, x, y, r, wrap.x, wrap.y);

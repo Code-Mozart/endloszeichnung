@@ -1,6 +1,7 @@
 import type { App } from './app';
 import type { ToolId } from './tools/tool';
-import { deleteDoc, listMetas, loadDoc } from './persist';
+import { deleteDoc, deleteImageBlob, imageStillUsed, listGallery, listMetas, loadDoc, putImage, removeGalleryEntry } from './persist';
+import { decodeFile, forget } from './images';
 import { download, toBlob, toSVG } from './exporter';
 import { Layer, defaultLayers } from './types';
 
@@ -8,11 +9,13 @@ const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const SWATCHES = ['#1a1a1a', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#ffffff'];
 
 export function setupUI(app: App) {
+  const POPS = ['#style', '#layers', '#images'];
+  const togglePop = (id: string) => { POPS.forEach(p => { if (p !== id) $(p).classList.add('off'); }); return $(id).classList.toggle('off'); };
   // ---- auto-hide: hide on any canvas interaction, return after 0.3s idle ----
   let timer = 0, held = 0;
   const show = () => { if (held > 0) return schedule(); document.body.classList.remove('ui-hidden'); };
   const schedule = () => { clearTimeout(timer); timer = window.setTimeout(show, 300); };
-  const activity = () => { document.body.classList.add('ui-hidden'); $('#style').classList.add('off'); $('#layers').classList.add('off'); schedule(); };
+  const activity = () => { document.body.classList.add('ui-hidden'); POPS.forEach(p => $(p).classList.add('off')); schedule(); };
 
   // ---- toolbar ----
   document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => b.onclick = () => {
@@ -26,8 +29,9 @@ export function setupUI(app: App) {
   $('#undo').onclick = () => app.store.undo();
   $('#redo').onclick = () => app.store.redo();
   $('#north').onclick = () => app.unlockRotation();
-  $('#styleBtn').onclick = () => { $('#layers').classList.add('off'); $('#style').classList.toggle('off'); };
-  $('#layersBtn').onclick = () => { $('#style').classList.add('off'); $('#layers').classList.toggle('off'); renderLayers(); };
+  $('#styleBtn').onclick = () => { togglePop('#style'); };
+  $('#layersBtn').onclick = () => { togglePop('#layers'); renderLayers(); };
+  $('#imagesBtn').onclick = () => { if (!togglePop('#images')) renderGallery(); };
 
   // ---- second toolbar row (persisted per device) ----
   const row2 = $('#row2'), bar = $('#bar');
@@ -47,7 +51,7 @@ export function setupUI(app: App) {
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
-    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', gridBtn: 'Show or hide the background grid', moreBtn: 'Show or hide the second toolbar row',
+    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', imagesBtn: 'Image gallery: upload pictures and add them to the drawing', gridBtn: 'Show or hide the background grid', moreBtn: 'Show or hide the second toolbar row',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
@@ -133,6 +137,42 @@ export function setupUI(app: App) {
   // ---- layers popup ----
   const llist = $('#llist');
   let sliding = false; // a slider or reorder drag is in progress: don't rebuild the list under it
+  // ---- image gallery ----
+  const igrid = $('#igrid'), fileIn = $<HTMLInputElement>('#file');
+  async function renderGallery() {
+    const list = await listGallery();
+    igrid.innerHTML = '';
+    if (!list.length) { igrid.innerHTML = '<div class="empty">No images yet. Upload some.</div>'; return; }
+    for (const e of list) {
+      const cell = document.createElement('div'); cell.className = 'ithumb';
+      const img = document.createElement('img'); img.src = e.thumb; img.alt = e.name; cell.appendChild(img);
+      const del = document.createElement('button'); del.textContent = '✕'; del.title = 'Remove from gallery';
+      del.onclick = async ev => {
+        ev.stopPropagation();
+        await app.flush();
+        await removeGalleryEntry(e.id);
+        // keep the picture if a drawing (or its undo history) still uses it
+        if (!(await imageStillUsed(e.id))) { await deleteImageBlob(e.id); forget(e.id); }
+        renderGallery();
+      };
+      cell.appendChild(del);
+      cell.onclick = async () => { $('#images').classList.add('off'); await app.addImage(e); };
+      igrid.appendChild(cell);
+    }
+  }
+  $('#upload').onclick = () => fileIn.click();
+  fileIn.onchange = async () => {
+    const files = [...(fileIn.files ?? [])]; fileIn.value = '';
+    for (const f of files) {
+      try {
+        const id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        const { blob, iw, ih, thumb } = await decodeFile(f, id);
+        await putImage({ id, name: f.name, iw, ih, thumb, createdAt: Date.now() }, blob);
+      } catch { alert('Could not read ' + f.name + ' as an image.'); }
+    }
+    renderGallery();
+  };
+
   let swallow = false; // the click that ends a long-press rename must not also select the layer
 
   /** Drag a layer row by its handle; neighbours swap places as the row passes their middle. One undo step on release. */
@@ -259,7 +299,7 @@ export function setupUI(app: App) {
         }
         const d = await loadDoc(m.id); if (!d) return;
         const base = m.name.replace(/[^\w-]+/g, '_');
-        if (k === 'svg') download(new Blob([toSVG(d.strokes, d.layers ?? defaultLayers())], { type: 'image/svg+xml' }), base + '.svg');
+        if (k === 'svg') download(new Blob([await toSVG(d.strokes, d.layers ?? defaultLayers())], { type: 'image/svg+xml' }), base + '.svg');
         else download(await toBlob(d.strokes, d.layers ?? defaultLayers(), k === 'png' ? 'image/png' : 'image/jpeg'), base + '.' + k);
       };
       list.appendChild(card);
