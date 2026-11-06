@@ -20,6 +20,7 @@ export class App {
   preview = new Map<string, Stroke>();
   pen = { color: '#1a1a1a', width: 3, alpha: 1 };
   activeLayer = 'l1';
+  grid = true;
   private opBefore: Layer[] | null = null;
   dpr = 1;
   /** Rotation gesture is locked by default; the rotation button unlocks it briefly. */
@@ -129,13 +130,20 @@ export class App {
     if (this.activeLayer === id) this.activeLayer = ls[Math.min(i, ls.length - 1)].id;
     this.store.setLayers(ls, gone);
   }
-  /** dir +1 = up the stack (drawn later / on top), -1 = down. */
-  moveLayer(id: string, dir: 1 | -1) {
-    const ls = this.store.snapshotLayers(), i = ls.findIndex(l => l.id === id), j = i + dir;
-    if (i < 0 || j < 0 || j >= ls.length) return;
-    [ls[i], ls[j]] = [ls[j], ls[i]];
-    this.store.setLayers(ls);
+  /** New stacking order, given bottom -> top. No-op if nothing changed. */
+  setLayerOrder(idsBottomFirst: string[]) {
+    const ls = this.store.snapshotLayers();
+    const next = idsBottomFirst.map(id => ls.find(l => l.id === id)).filter((l): l is Layer => !!l);
+    if (next.length !== ls.length || next.every((l, i) => l.id === ls[i].id)) return;
+    this.store.setLayers(next);
   }
+  renameLayer(id: string, name: string) {
+    name = name.trim().slice(0, 40);
+    const ls = this.store.snapshotLayers(), l = ls.find(x => x.id === id);
+    if (!l || !name || l.name === name) return;
+    l.name = name; this.store.setLayers(ls);
+  }
+  toggleGrid() { this.grid = !this.grid; this.scheduleSave(); this.requestRender(); this.notify(); }
   toggleLayerVisible(id: string) {
     const ls = this.store.snapshotLayers(), l = ls.find(x => x.id === id); if (!l) return;
     l.visible = !l.visible; this.store.setLayers(ls);
@@ -156,7 +164,7 @@ export class App {
   loadData(d: DocData, thumb = '') {
     this.store.load(d.strokes, d.history, d.hIdx, d.layers ?? defaultLayers());
     this.activeLayer = d.activeLayer && this.store.layers.some(l => l.id === d.activeLayer) ? d.activeLayer : this.store.layers[this.store.layers.length - 1].id;
-    this.view.cam = d.camera; this.wrap = d.wrap;
+    this.view.cam = d.camera; this.wrap = d.wrap; this.grid = d.grid ?? true;
     this.doc = { id: d.id, name: d.name, createdAt: d.createdAt, updatedAt: d.updatedAt, thumb };
     this.selection.clear(); this.preview = new Map(); this.contentDirty = false;
     setLast(d.id); this.requestRender(); this.notify();
@@ -182,7 +190,7 @@ export class App {
     if (this.contentDirty) { this.doc.updatedAt = Date.now(); this.doc.thumb = thumbnail(strokes, this.store.layers); this.contentDirty = false; }
     const { id, name, createdAt, updatedAt, thumb } = this.doc;
     await saveDoc(
-      { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap }, layers: this.store.layers, activeLayer: this.activeLayer },
+      { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap }, layers: this.store.layers, activeLayer: this.activeLayer, grid: this.grid },
       { id, name, createdAt, updatedAt, thumb });
   }
 }

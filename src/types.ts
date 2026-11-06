@@ -8,7 +8,7 @@ export interface Wrap { x: boolean; y: boolean }
 export interface Meta { id: string; name: string; createdAt: number; updatedAt: number; thumb: string }
 export interface DocData {
   v: 1; id: string; name: string; createdAt: number; updatedAt: number;
-  strokes: Stroke[]; history: Diff[]; hIdx: number; camera: Camera; wrap: Wrap; layers?: Layer[]; activeLayer?: string;
+  strokes: Stroke[]; history: Diff[]; hIdx: number; camera: Camera; wrap: Wrap; layers?: Layer[]; activeLayer?: string; grid?: boolean;
 }
 export const PERIOD = 2000;
 export const MAX_HISTORY = 1000;

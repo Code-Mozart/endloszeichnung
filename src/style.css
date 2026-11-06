@@ -72,3 +72,7 @@ body.ui-hidden #tip { opacity:0; }
 .lrow .nm { flex:1; min-width:0; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:none !important; }
 .lrow input[type=range] { width:72px; flex:none; }
 .lrow.hid .nm { opacity:.45; text-decoration:line-through; }
+#bar button.toggled { background:#dce8ff; }
+#lhint { margin-top:8px; font-size:11px; color:#777; }
+.lrow .grip { touch-action:none; cursor:grab; font-size:18px; color:#666; }
+.lrow.drag { position:relative; z-index:5; box-shadow:0 4px 14px rgba(0,0,0,.3); opacity:.95; transition:none; }

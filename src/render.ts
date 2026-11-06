@@ -17,14 +17,16 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
   ctx.translate(view.w / 2, view.h / 2); ctx.rotate(rot); ctx.scale(zoom, zoom); ctx.translate(-cx, -cy);
   const vb = view.bounds();
 
-  // faint reference grid
-  let step = 250;
-  while (step * zoom < 50) step *= 2;
-  while (step * zoom > 250) step /= 2;
-  ctx.lineWidth = 1 / zoom; ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.beginPath();
-  for (let x = Math.floor(vb.minX / step) * step; x <= vb.maxX; x += step) { ctx.moveTo(x, vb.minY); ctx.lineTo(x, vb.maxY); }
-  for (let y = Math.floor(vb.minY / step) * step; y <= vb.maxY; y += step) { ctx.moveTo(vb.minX, y); ctx.lineTo(vb.maxX, y); }
-  ctx.stroke();
+  if (app.grid) {
+    // faint reference grid
+    let step = 250;
+    while (step * zoom < 50) step *= 2;
+    while (step * zoom > 250) step /= 2;
+    ctx.lineWidth = 1 / zoom; ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.beginPath();
+    for (let x = Math.floor(vb.minX / step) * step; x <= vb.maxX; x += step) { ctx.moveTo(x, vb.minY); ctx.lineTo(x, vb.maxY); }
+    for (let y = Math.floor(vb.minY / step) * step; y <= vb.maxY; y += step) { ctx.moveTo(vb.minX, y); ctx.lineTo(vb.maxX, y); }
+    ctx.stroke();
+  }
 
   const setup = (c: CanvasRenderingContext2D) => {
     c.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
