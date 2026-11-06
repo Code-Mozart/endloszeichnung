@@ -247,6 +247,11 @@ export function setupUI(app: App) {
       r.onchange = () => { sliding = false; app.commitLayerOpacity(); };
       r.onpointerup = () => { sliding = false; };
       row.appendChild(r);
+      // this layer's remembered pen style; tapping it copies the style to the active layer (and the pen)
+      const st = app.layerStyles[l.id] ?? app.pen;
+      const sw = btn('', () => app.copyLayerStyle(l.id), l.id === app.activeLayer, 'lstyle');
+      sw.innerHTML = `<u style="background:${rgba(st.color, st.alpha)}"></u>`;
+      sw.title = `Layer style: ${Math.round(st.alpha * 100)}% opacity, width ${st.width.toFixed(1)}, ${DASH_NAMES[st.dash]}. Tap to use it on the active layer`;
       btn('🗑', () => app.removeLayer(l.id), ls.length <= 1);
       const grip = btn('☰', () => {}, ls.length <= 1, 'grip');
       row.dataset.id = l.id;

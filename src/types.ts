@@ -4,6 +4,8 @@ export interface Stroke { id: string; type: 'stroke'; pts: number[]; color: stri
 /** A raster image placed in the drawing. `m` maps image pixels (0..iw, 0..ih) to world coordinates. */
 export interface ImageObj { id: string; type: 'image'; img: string; iw: number; ih: number; m: [number, number, number, number, number, number]; alpha?: number; layer?: string }
 export type Obj = Stroke | ImageObj;
+/** Drawing style of the pen and shapes. Remembered per layer; it does not restyle existing objects. */
+export interface PenStyle { color: string; width: number; alpha: number; dash: DashKind }
 export interface Layer { id: string; name: string; opacity: number; visible: boolean }
 export const defaultLayers = (): Layer[] => [{ id: 'l1', name: 'Layer 1', opacity: 1, visible: true }];
 /** One undoable step: remove `removed` (by id), then append `added`. */
@@ -15,7 +17,7 @@ export interface GalleryEntry { id: string; name: string; iw: number; ih: number
 export interface Meta { id: string; name: string; createdAt: number; updatedAt: number; thumb: string }
 export interface DocData {
   v: 1; id: string; name: string; createdAt: number; updatedAt: number;
-  strokes: Obj[]; history: Diff[]; hIdx: number; camera: Camera; wrap: Wrap; layers?: Layer[]; activeLayer?: string; grid?: boolean;
+  strokes: Obj[]; history: Diff[]; hIdx: number; camera: Camera; wrap: Wrap; layers?: Layer[]; activeLayer?: string; grid?: boolean; layerStyles?: Record<string, PenStyle>;
 }
 export const PERIOD = 2000;
 export const MAX_HISTORY = 1000;

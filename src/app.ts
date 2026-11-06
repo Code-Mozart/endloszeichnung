@@ -1,7 +1,7 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, Wrap, defaultLayers, uid } from './types';
+import { DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Wrap, defaultLayers, uid } from './types';
 import { Mat, mul, objBB, rotateM, scaleM, transformObj, translateM, unionBB } from './geom';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
@@ -20,7 +20,9 @@ export class App {
   toolId: ToolId = 'pen';
   selection = new Set<string>();
   preview = new Map<string, Obj>();
-  pen = { color: '#1a1a1a', width: 3, alpha: 1, dash: 'solid' as DashKind };
+  pen: PenStyle = { color: '#1a1a1a', width: 3, alpha: 1, dash: 'solid' };
+  /** Pen style remembered per layer (saved with the drawing, not part of undo). */
+  layerStyles: Record<string, PenStyle> = {};
   clipboard: Obj[] = [];
   activeLayer = 'l1';
   grid = true;
@@ -43,7 +45,7 @@ export class App {
     this.tools = { pen: new PenTool(this), erase: new EraseTool(this), select: new SelectTool(this), shapes: new ShapeTool(this) };
     this.store.onChange(() => {
       for (const id of this.selection) if (!this.store.strokes.has(id)) this.selection.delete(id);
-      if (!this.store.layers.some(l => l.id === this.activeLayer)) this.activeLayer = this.store.layers[this.store.layers.length - 1].id;
+      if (!this.store.layers.some(l => l.id === this.activeLayer)) this.activate(this.store.layers[this.store.layers.length - 1].id);
       this.contentDirty = true; this.scheduleSave(); this.requestRender(); this.notify();
     });
   }
@@ -134,7 +136,10 @@ export class App {
       const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
       // images only take opacity; strokes take everything
       this.store.apply({ removed, added: removed.map(s => (s.type === 'stroke' ? { ...s, ...patch } : patch.alpha === undefined ? s : { ...s, alpha: patch.alpha })) });
-    } else Object.assign(this.pen, patch);
+    } else {
+      Object.assign(this.pen, patch);
+      this.layerStyles[this.activeLayer] = { ...this.pen }; this.scheduleSave();
+    }
     this.notify();
   }
 
@@ -152,13 +157,28 @@ export class App {
   }
 
   // ---- layers ----
-  setActiveLayer(id: string) { if (id !== this.activeLayer) this.selection.clear(); this.activeLayer = id; this.scheduleSave(); this.notify(); }
+  /** Make a layer active and switch the pen to that layer's style (a layer without one starts with the current style). */
+  private activate(id: string) {
+    this.activeLayer = id;
+    this.pen = { ...(this.layerStyles[id] ?? this.pen) };
+    this.layerStyles[id] = { ...this.pen };
+  }
+  setActiveLayer(id: string) {
+    if (id !== this.activeLayer) { this.selection.clear(); this.activate(id); }
+    this.scheduleSave(); this.notify();
+  }
+  /** Take over another layer's remembered style for the active layer (and the pen). */
+  copyLayerStyle(fromId: string) {
+    const st = this.layerStyles[fromId]; if (!st || fromId === this.activeLayer) return;
+    this.pen = { ...st }; this.layerStyles[this.activeLayer] = { ...st };
+    this.scheduleSave(); this.notify();
+  }
   addLayer() {
     const ls = this.store.snapshotLayers();
     let n = 1; while (ls.some(l => l.name === 'Layer ' + n)) n++;
     const layer: Layer = { id: uid(), name: 'Layer ' + n, opacity: 1, visible: true };
     ls.splice(ls.findIndex(l => l.id === this.activeLayer) + 1, 0, layer);
-    this.activeLayer = layer.id;
+    this.activate(layer.id);
     this.store.setLayers(ls);
   }
   removeLayer(id: string) {
@@ -166,7 +186,8 @@ export class App {
     const i = ls.findIndex(l => l.id === id); if (i < 0) return;
     const gone = [...this.store.strokes.values()].filter(s => this.store.layerOf(s) === id);
     ls.splice(i, 1);
-    if (this.activeLayer === id) this.activeLayer = ls[Math.min(i, ls.length - 1)].id;
+    delete this.layerStyles[id];
+    if (this.activeLayer === id) this.activate(ls[Math.min(i, ls.length - 1)].id);
     this.store.setLayers(ls, gone);
   }
   /** New stacking order, given bottom -> top. No-op if nothing changed. */
@@ -202,7 +223,10 @@ export class App {
   // ---- persistence ----
   loadData(d: DocData, thumb = '') {
     this.store.load(d.strokes, d.history, d.hIdx, d.layers ?? defaultLayers());
-    this.activeLayer = d.activeLayer && this.store.layers.some(l => l.id === d.activeLayer) ? d.activeLayer : this.store.layers[this.store.layers.length - 1].id;
+    this.layerStyles = { ...(d.layerStyles ?? {}) };
+    const act = d.activeLayer && this.store.layers.some(l => l.id === d.activeLayer) ? d.activeLayer : this.store.layers[this.store.layers.length - 1].id;
+    this.pen = { color: '#1a1a1a', width: 3, alpha: 1, dash: 'solid' }; // layers without a stored style start from the default
+    this.activate(act);
     this.view.cam = d.camera; this.wrap = d.wrap; this.grid = d.grid ?? true;
     this.doc = { id: d.id, name: d.name, createdAt: d.createdAt, updatedAt: d.updatedAt, thumb };
     this.selection.clear(); this.preview = new Map(); this.contentDirty = false;
@@ -229,7 +253,7 @@ export class App {
     if (this.contentDirty) { this.doc.updatedAt = Date.now(); this.doc.thumb = thumbnail(strokes, this.store.layers); this.contentDirty = false; }
     const { id, name, createdAt, updatedAt, thumb } = this.doc;
     await saveDoc(
-      { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap }, layers: this.store.layers, activeLayer: this.activeLayer, grid: this.grid },
+      { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap }, layers: this.store.layers, activeLayer: this.activeLayer, grid: this.grid, layerStyles: Object.fromEntries(Object.entries(this.layerStyles).filter(([id]) => this.store.layers.some(l => l.id === id))) },
       { id, name, createdAt, updatedAt, thumb });
   }
 }
