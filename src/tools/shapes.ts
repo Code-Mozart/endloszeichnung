@@ -12,11 +12,16 @@ const ARROW_ANGLE = (28 * Math.PI) / 180;
 const MIN_DRAG_PX = 3;
 
 type Pt = [number, number];
-/** Polyline through the given corners with a node about every `step` world units. */
+/**
+ * Polyline through the given corners with a node about every `step` world units.
+ * Interior corners get repeated nodes: the stroke smoothing cuts corners by a fixed amount otherwise,
+ * which shows as blunt corners and tips (e.g. on arrow heads) once the view is zoomed in.
+ */
 function dense(corners: Pt[], step: number): number[] {
   const out: number[] = [];
   for (let e = 0; e < corners.length - 1; e++) {
     const [x0, y0] = corners[e], [x1, y1] = corners[e + 1];
+    if (e > 0) out.push(x0, y0, x0, y0);
     const k = Math.min(4000, Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / step)));
     for (let i = 0; i < k; i++) out.push(x0 + ((x1 - x0) * i) / k, y0 + ((y1 - y0) * i) / k);
   }
