@@ -91,6 +91,7 @@ export class SelectTool implements Tool {
         const cy = this.lasso.reduce((a, q) => a + q[1], 0) / this.lasso.length;
         app.selection = new Set();
         for (const s of app.store.strokes.values()) {
+          if (!app.store.isVisible(s)) continue;
           for (let i = 0; i < s.pts.length; i += 2) {
             let x = s.pts[i], y = s.pts[i + 1];
             if (app.wrap.x) x += P * Math.round((cx - x) / P);

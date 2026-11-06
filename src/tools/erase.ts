@@ -28,7 +28,7 @@ function eraseStroke(s: Stroke, x: number, y: number, r: number, wx: boolean, wy
   const out: Stroke[] = [];
   let cur: number[] = [];
   const flush = () => {
-    if (cur.length) out.push({ id: uid(), type: 'stroke', pts: cur, color: s.color, width: s.width });
+    if (cur.length) out.push({ ...s, id: uid(), pts: cur });
     cur = [];
   };
   for (let i = 0; i < n; i++) {
@@ -51,6 +51,7 @@ export class EraseTool implements Tool {
     const { store, wrap } = this.app, r = this.radius();
     const rm: Stroke[] = [], add: Stroke[] = [];
     for (const s of [...store.strokes.values()]) {
+      if (!store.isVisible(s)) continue;
       const bb = strokeBB(s);
       if (!wrap.x && (x < bb.minX - r || x > bb.maxX + r)) continue;
       if (!wrap.y && (y < bb.minY - r || y > bb.maxY + r)) continue;

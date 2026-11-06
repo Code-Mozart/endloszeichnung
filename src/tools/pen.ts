@@ -38,7 +38,7 @@ export class PenTool implements Tool {
   }
 
   down(p: PInfo) {
-    this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: this.app.pen.color, width: this.app.pen.width };
+    this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: this.app.pen.color, width: this.app.pen.width, alpha: this.app.pen.alpha, layer: this.app.activeLayer };
     this.line = false; this.last = p;
     this.app.store.applyLive({ removed: [], added: [this.s] });
     this.arm(p);
