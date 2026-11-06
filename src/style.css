@@ -7,9 +7,9 @@ html,body { margin:0; height:100%; overflow:hidden; overscroll-behavior:none; ba
 body.ui-hidden .ui { opacity:0; pointer-events:none; transform:translateY(8px); }
 #bar { position:fixed; left:0; right:0; bottom:0; display:flex; flex-direction:column; padding:2px 4px;
   background:var(--bar); border-radius:10px 10px 0 0; box-shadow:0 -1px 8px rgba(0,0,0,.2); }
-#bar .brow { display:flex; }
+#bar .brow { display:flex; justify-content:flex-end; }
 #bar .brow.off { display:none; }
-#bar button { flex:1; min-width:0; border:0; background:none; border-radius:8px; padding:3px 0 2px; display:flex; flex-direction:column; align-items:center; gap:0; color:inherit; font:inherit; }
+#bar button { flex:0 0 calc(100% / 7); min-width:0; border:0; background:none; border-radius:8px; padding:3px 0 2px; display:flex; flex-direction:column; align-items:center; gap:0; color:inherit; font:inherit; }
 #bar i { font-style:normal; font-size:22px; line-height:26px; height:26px; display:flex; align-items:center; }
 #bar i svg { width:24px; height:24px; }
 #bar span { font-size:9px; white-space:nowrap; }

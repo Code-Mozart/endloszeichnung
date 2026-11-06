@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { Stroke, uid } from '../types';
 import { invalidate } from '../geom';
+import { snapShape } from '../shapes';
 import type { PInfo, Tool } from './tool';
 
 const HOLD_MS = 800;
@@ -14,6 +15,7 @@ export class PenTool implements Tool {
   private anchor = { sx: 0, sy: 0 };
   private last: PInfo | null = null;
   private line = false;
+  private shape = false;
   constructor(private app: App) {}
 
   private arm(p: PInfo) {
@@ -21,12 +23,17 @@ export class PenTool implements Tool {
     clearTimeout(this.timer);
     this.timer = window.setTimeout(() => this.snap(), HOLD_MS);
   }
-  /** Replace the freehand stroke by a straight line start -> current point (dense nodes so the eraser can cut it). */
+  /**
+   * Hold-to-snap. A closed stroke that looks like a rectangle or ellipse becomes the perfect shape; an open stroke becomes a
+   * straight line start -> current point; a closed stroke that is neither stays as drawn. Dense nodes so the eraser can cut them.
+   */
   private snap() {
-    const s = this.s, p = this.last; if (!s || !p || this.line) return;
-    this.line = true;
+    const s = this.s, p = this.last; if (!s || !p || this.line || this.shape) return;
+    const r = snapShape(s.pts, LINE_STEP_PX / this.app.view.cam.zoom);
+    if (r.kind === 'none') return; // closed but unrecognized: leave as drawn
     navigator.vibrate?.(15);
-    this.setLine(p);
+    if (r.kind === 'shape') { this.shape = true; s.pts = r.pts; invalidate(s); this.app.requestRender(); return; }
+    this.line = true; this.setLine(p);
   }
   private setLine(p: PInfo) {
     const s = this.s!, x0 = s.pts[0], y0 = s.pts[1];
@@ -39,7 +46,7 @@ export class PenTool implements Tool {
 
   down(p: PInfo) {
     this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: this.app.pen.color, width: this.app.pen.width, alpha: this.app.pen.alpha, layer: this.app.activeLayer };
-    this.line = false; this.last = p;
+    this.line = false; this.shape = false; this.last = p;
     this.app.store.applyLive({ removed: [], added: [this.s] });
     this.arm(p);
   }
@@ -47,6 +54,7 @@ export class PenTool implements Tool {
     const s = this.s; if (!s) return;
     this.last = p;
     if (this.line) { this.setLine(p); return; }
+    if (this.shape) return; // snapped shape stays put until the pen is lifted
     if (Math.hypot(p.sx - this.anchor.sx, p.sy - this.anchor.sy) > HOLD_TOLERANCE_PX) this.arm(p);
     const n = s.pts.length, min = 1.2 / this.app.view.cam.zoom;
     const lx = s.pts[n - 2], ly = s.pts[n - 1];
@@ -57,13 +65,13 @@ export class PenTool implements Tool {
   up(p: PInfo) {
     const s = this.s; if (!s) return;
     clearTimeout(this.timer);
-    if (this.line) this.setLine(p); else this.move(p);
+    if (this.line) this.setLine(p); else if (!this.shape) this.move(p);
     this.app.store.record({ removed: [], added: [s] });
-    this.s = null; this.line = false;
+    this.s = null; this.line = false; this.shape = false;
   }
   cancel() {
     clearTimeout(this.timer);
     if (this.s) this.app.store.applyLive({ removed: [this.s], added: [] });
-    this.s = null; this.line = false;
+    this.s = null; this.line = false; this.shape = false;
   }
 }
