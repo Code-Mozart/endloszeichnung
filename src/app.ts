@@ -1,7 +1,7 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DocData, Stroke, Wrap, uid } from './types';
+import { DocData, PERIOD, Stroke, Wrap, uid } from './types';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
 import { EraseTool } from './tools/erase';
@@ -89,7 +89,7 @@ export class App {
     const now = Date.now();
     this.loadData({
       v: 1, id: uid(), name: 'Drawing ' + new Date(now).toLocaleDateString(), createdAt: now, updatedAt: now,
-      strokes: [], history: [], hIdx: 0, camera: { cx: 1000, cy: 1000, zoom: 1, rot: 0 }, wrap: { x: false, y: false },
+      strokes: [], history: [], hIdx: 0, camera: { cx: PERIOD / 2, cy: PERIOD / 2, zoom: (this.view.h * 0.92) / PERIOD, rot: 0 }, wrap: { x: false, y: false },
     });
     this.contentDirty = true; this.scheduleSave();
   }

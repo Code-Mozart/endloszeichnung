@@ -31,14 +31,14 @@ export function setupUI(app: App) {
   width.oninput = () => { app.setStyle({ width: +width.value }, false); $('#wval').textContent = width.value; };
   width.onchange = () => app.setStyle({ width: +width.value }, true);
 
-  const WL = ['Off', 'Vertical', 'Horizontal', 'Both'];
+  const WL = ['off', 'V', 'H', 'V+H'];
   const refresh = () => {
     document.querySelectorAll<HTMLButtonElement>('#bar button').forEach(b => b.classList.remove('active'));
     const act = app.toolId === 'select' ? $('#selBtn') : app.toolId === 'wrap' ? $('#wrapBtn') : document.querySelector(`[data-tool=${app.toolId}]`)!;
     act.classList.add('active');
     $<HTMLButtonElement>('#undo').disabled = !app.store.canUndo;
     $<HTMLButtonElement>('#redo').disabled = !app.store.canRedo;
-    $('#wrapLbl').textContent = 'Wrap: ' + WL[(app.wrap.x ? 1 : 0) + (app.wrap.y ? 2 : 0)];
+    $('#wrapLbl').textContent = 'Wrap ' + WL[(app.wrap.x ? 1 : 0) + (app.wrap.y ? 2 : 0)];
     const st = app.styleView();
     $('#dot').style.background = st.color;
     if (document.activeElement !== color) color.value = st.color;
