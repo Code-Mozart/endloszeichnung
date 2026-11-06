@@ -48,16 +48,16 @@ export class PenTool implements Tool {
     s.pts = pts; invalidate(s); this.app.requestRender();
   }
 
-  /** An open stroke on the active layer with the same style whose start or end is right under the pen. */
-  private findJoin(p: PInfo): { s: Stroke; atStart: boolean } | null {
+  /** An open stroke on the active layer with the same style whose start or end is within reach of (x, y). */
+  private findJoin(x: number, y: number, excludeId = ''): { s: Stroke; atStart: boolean } | null {
     const { app } = this, { store, pen } = app, tol = JOIN_PX / app.view.cam.zoom;
     let best: { s: Stroke; atStart: boolean } | null = null, bd = tol;
     for (const o of store.strokes.values()) {
-      if (o.type !== 'stroke' || o.pts.length < 4 || store.layerOf(o) !== app.activeLayer || !store.isVisible(o)) continue;
+      if (o.type !== 'stroke' || o.id === excludeId || o.pts.length < 4 || store.layerOf(o) !== app.activeLayer || !store.isVisible(o)) continue;
       if (o.color !== pen.color || o.width !== pen.width || (o.alpha ?? 1) !== pen.alpha || (o.dash ?? 'solid') !== pen.dash) continue;
       const n = o.pts.length, x0 = o.pts[0], y0 = o.pts[1], x1 = o.pts[n - 2], y1 = o.pts[n - 1];
       if (Math.hypot(x1 - x0, y1 - y0) < tol) continue; // closed outline: nothing to continue
-      const de = Math.hypot(p.wx - x1, p.wy - y1), ds = Math.hypot(p.wx - x0, p.wy - y0);
+      const de = Math.hypot(x - x1, y - y1), ds = Math.hypot(x - x0, y - y0);
       if (de < bd) { bd = de; best = { s: o, atStart: false }; }
       if (ds < bd) { bd = ds; best = { s: o, atStart: true }; }
     }
@@ -66,7 +66,7 @@ export class PenTool implements Tool {
 
   down(p: PInfo) {
     const { pen, activeLayer, store } = this.app;
-    const join = this.findJoin(p);
+    const join = this.findJoin(p.wx, p.wy);
     this.line = false; this.last = p;
     if (join) {
       const pts = join.atStart ? reversePts(join.s.pts) : [...join.s.pts];
@@ -95,9 +95,18 @@ export class PenTool implements Tool {
     const s = this.s; if (!s) return;
     clearTimeout(this.timer);
     if (this.line) this.setLine(p); else this.move(p);
-    // continuing a stroke without adding anything is not an edit
-    if (!this.old || s.pts.length > this.base.length) this.app.store.record({ removed: this.old ? [this.old] : [], added: [s] });
-    else this.app.store.applyLive({ removed: [s], added: [this.old] });
+    const { store } = this.app;
+    if (this.old && s.pts.length <= this.base.length) { // continuing a stroke without adding anything is not an edit
+      store.applyLive({ removed: [s], added: [this.old] });
+    } else {
+      // ending close to the end of another matching stroke merges the two into one
+      const n = s.pts.length, t = this.findJoin(s.pts[n - 2], s.pts[n - 1], s.id);
+      if (t) {
+        const merged: Stroke = { ...s, pts: t.atStart ? [...s.pts, ...t.s.pts] : [...s.pts, ...reversePts(t.s.pts)] };
+        store.applyLive({ removed: [s, t.s], added: [merged] });
+        store.record({ removed: this.old ? [this.old, t.s] : [t.s], added: [merged] });
+      } else store.record({ removed: this.old ? [this.old] : [], added: [s] });
+    }
     this.s = null; this.old = null; this.line = false;
   }
   cancel() {
