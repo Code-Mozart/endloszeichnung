@@ -5,15 +5,15 @@ html,body { margin:0; height:100%; overflow:hidden; overscroll-behavior:none; ba
 #c { position:fixed; inset:0; width:100%; height:100%; touch-action:none; display:block; }
 .ui { transition:opacity .2s, transform .2s; }
 body.ui-hidden .ui { opacity:0; pointer-events:none; transform:translateY(8px); }
-#bar { position:fixed; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); display:flex; gap:2px; padding:4px;
-  background:var(--bar); border-radius:14px; box-shadow:0 2px 14px rgba(0,0,0,.25); }
-#bar button { flex:1; min-width:0; border:0; background:none; border-radius:10px; padding:6px 0 4px; display:flex; flex-direction:column; align-items:center; gap:2px; color:inherit; font:inherit; }
-#bar i { font-style:normal; font-size:20px; line-height:24px; height:24px; }
-#bar span { font-size:9.5px; white-space:nowrap; }
+#bar { position:fixed; left:0; right:0; bottom:0; display:flex; gap:0; padding:2px 4px calc(2px + env(safe-area-inset-bottom));
+  background:var(--bar); border-radius:10px 10px 0 0; box-shadow:0 -1px 8px rgba(0,0,0,.2); }
+#bar button { flex:1; min-width:0; border:0; background:none; border-radius:8px; padding:3px 0 2px; display:flex; flex-direction:column; align-items:center; gap:0; color:inherit; font:inherit; }
+#bar i { font-style:normal; font-size:16px; line-height:18px; height:18px; }
+#bar span { font-size:8.5px; white-space:nowrap; }
 #bar button.active { background:var(--ac); color:#fff; }
 #bar button:disabled { opacity:.3; }
-#dot { display:block; width:20px; height:20px; border-radius:50%; border:2px solid #888; margin-top:2px; }
-.pop { position:fixed; left:8px; right:8px; bottom:calc(86px + env(safe-area-inset-bottom)); background:var(--bar); border-radius:14px; padding:12px; box-shadow:0 2px 14px rgba(0,0,0,.25); max-width:420px; margin:auto; }
+#dot { display:block; width:15px; height:15px; border-radius:50%; border:2px solid #888; margin-top:1px; }
+.pop { position:fixed; left:8px; right:8px; bottom:calc(46px + env(safe-area-inset-bottom)); background:var(--bar); border-radius:14px; padding:12px; box-shadow:0 2px 14px rgba(0,0,0,.25); max-width:420px; margin:auto; }
 .pop.off, #gal.off { display:none; }
 #swatches { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
 #swatches b { width:34px; height:34px; border-radius:50%; border:2px solid #999; }
@@ -32,3 +32,6 @@ body.ui-hidden .ui { opacity:0; pointer-events:none; transform:translateY(8px); 
 .card .meta b { font-size:14px; color:#111; }
 .card .btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
 .card .btns button { padding:6px 9px; font-size:12px; }
+#tip { position:fixed; z-index:20; max-width:240px; padding:6px 10px; border-radius:8px; background:rgba(30,30,35,.95); color:#fff; font-size:12px; pointer-events:none; opacity:0; transition:opacity .12s; }
+#tip.on { opacity:1; }
+body.ui-hidden #tip { opacity:0; }
