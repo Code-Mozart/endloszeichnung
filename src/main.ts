@@ -31,3 +31,10 @@ navigator.storage?.persist?.().catch(() => {});
   const d = id ? await loadDoc(id) : undefined;
   if (d) app.loadData(d); else app.newDoc();
 })();
+
+const ver = __APP_VERSION__ === 'dev' ? 'dev build' : 'v' + __APP_VERSION__;
+document.title = 'Endloszeichnung ' + ver;
+const pill = document.getElementById('ver')!;
+pill.textContent = 'Endloszeichnung ' + ver;
+pill.classList.add('on');
+setTimeout(() => pill.classList.remove('on'), 4000);

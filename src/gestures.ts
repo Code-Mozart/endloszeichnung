@@ -48,7 +48,7 @@ export function attachGestures(canvas: HTMLCanvasElement, app: App, activity: ()
       toolPtr = null;
       if (cancelled) app.activeTool().cancel(); else app.activeTool().up(info(e.clientX, e.clientY));
     }
-    if (ptrs.size < 2 && nav) { nav = null; app.navActive = false; app.lockRotation(); }
+    if (ptrs.size < 2 && nav) { nav = null; app.navActive = false; app.lockRotation(); app.notify(); }
     if (ptrs.size === 0) locked = false;
   };
   canvas.addEventListener('pointerup', e => end(e, false));

@@ -46,3 +46,6 @@ body.ui-hidden #tip { opacity:0; }
 #hue::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:#fff; border:3px solid #444; }
 #wval { min-width:3.2ch; text-align:right; font-variant-numeric:tabular-nums; }
 #bar button.unlocked { background:#ff9800; color:#fff; }
+#ver { position:fixed; top:calc(10px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:30; padding:5px 12px; border-radius:14px;
+  background:rgba(30,30,35,.9); color:#fff; font-size:12px; pointer-events:none; opacity:0; transition:opacity .4s; }
+#ver.on { opacity:1; }

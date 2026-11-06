@@ -48,9 +48,18 @@ export class App {
   }
   cameraChanged() { this.scheduleSave(); this.requestRender(); }
 
-  /** Reset rotation to 0 and allow the rotate gesture for 1s or until the next gesture ends. */
+  /** View heading if the rotation is aligned to a cardinal direction (0 = north, top of screen points to it). */
+  heading(): 'N' | 'E' | 'S' | 'W' | null {
+    const k = -this.view.cam.rot / (Math.PI / 2);
+    if (Math.abs(k - Math.round(k)) > 0.05) return null;
+    return (['N', 'E', 'S', 'W'] as const)[((Math.round(k) % 4) + 4) % 4];
+  }
+  /** Rotation button: step N -> E -> S -> W (or snap to N when freely rotated), then allow rotating for 1s / one gesture. */
   unlockRotation() {
-    this.view.cam.rot = 0; this.cameraChanged();
+    const h = this.heading();
+    const next = h ? (['N', 'E', 'S', 'W'].indexOf(h) + 1) % 4 : 0;
+    this.view.cam.rot = [0, -Math.PI / 2, Math.PI, Math.PI / 2][next];
+    this.cameraChanged();
     this.rotLocked = false; this.notify();
     clearTimeout(this.rotTimer);
     this.rotTimer = window.setTimeout(() => { if (!this.navActive) this.lockRotation(); }, 1000);
