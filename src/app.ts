@@ -1,7 +1,7 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DocData, PERIOD, Stroke, Wrap, uid } from './types';
+import { DocData, Layer, PERIOD, Stroke, Wrap, defaultLayers, uid } from './types';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
 import { EraseTool } from './tools/erase';
@@ -18,7 +18,9 @@ export class App {
   toolId: ToolId = 'pen';
   selection = new Set<string>();
   preview = new Map<string, Stroke>();
-  pen = { color: '#1a1a1a', width: 3 };
+  pen = { color: '#1a1a1a', width: 3, alpha: 1 };
+  activeLayer = 'l1';
+  private opBefore: Layer[] | null = null;
   dpr = 1;
   /** Rotation gesture is locked by default; the rotation button unlocks it briefly. */
   rotLocked = true;
@@ -36,6 +38,7 @@ export class App {
     this.tools = { pen: new PenTool(this), erase: new EraseTool(this), select: new SelectTool(this), wrap: new WrapTool() };
     this.store.onChange(() => {
       for (const id of this.selection) if (!this.store.strokes.has(id)) this.selection.delete(id);
+      if (!this.store.layers.some(l => l.id === this.activeLayer)) this.activeLayer = this.store.layers[this.store.layers.length - 1].id;
       this.contentDirty = true; this.scheduleSave(); this.requestRender(); this.notify();
     });
   }
@@ -95,11 +98,11 @@ export class App {
   styleView() {
     if (this.toolId === 'select' && this.selection.size) {
       const s = this.store.strokes.get([...this.selection][0]);
-      if (s) return { color: s.color, width: s.width };
+      if (s) return { color: s.color, width: s.width, alpha: s.alpha ?? 1 };
     }
     return this.pen;
   }
-  setStyle(patch: { color?: string; width?: number }, commit: boolean) {
+  setStyle(patch: { color?: string; width?: number; alpha?: number }, commit: boolean) {
     if (this.toolId === 'select' && this.selection.size) {
       if (!commit) return;
       const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
@@ -108,9 +111,51 @@ export class App {
     this.notify();
   }
 
+  // ---- layers ----
+  setActiveLayer(id: string) { this.activeLayer = id; this.scheduleSave(); this.notify(); }
+  addLayer() {
+    const ls = this.store.snapshotLayers();
+    let n = 1; while (ls.some(l => l.name === 'Layer ' + n)) n++;
+    const layer: Layer = { id: uid(), name: 'Layer ' + n, opacity: 1, visible: true };
+    ls.splice(ls.findIndex(l => l.id === this.activeLayer) + 1, 0, layer);
+    this.activeLayer = layer.id;
+    this.store.setLayers(ls);
+  }
+  removeLayer(id: string) {
+    const ls = this.store.snapshotLayers(); if (ls.length <= 1) return;
+    const i = ls.findIndex(l => l.id === id); if (i < 0) return;
+    const gone = [...this.store.strokes.values()].filter(s => this.store.layerOf(s) === id);
+    ls.splice(i, 1);
+    if (this.activeLayer === id) this.activeLayer = ls[Math.min(i, ls.length - 1)].id;
+    this.store.setLayers(ls, gone);
+  }
+  /** dir +1 = up the stack (drawn later / on top), -1 = down. */
+  moveLayer(id: string, dir: 1 | -1) {
+    const ls = this.store.snapshotLayers(), i = ls.findIndex(l => l.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= ls.length) return;
+    [ls[i], ls[j]] = [ls[j], ls[i]];
+    this.store.setLayers(ls);
+  }
+  toggleLayerVisible(id: string) {
+    const ls = this.store.snapshotLayers(), l = ls.find(x => x.id === id); if (!l) return;
+    l.visible = !l.visible; this.store.setLayers(ls);
+  }
+  /** Live opacity preview while a slider is dragged; commitLayerOpacity() makes it one undo step. */
+  layerOpacityLive(id: string, v: number) {
+    const l = this.store.layers.find(x => x.id === id); if (!l) return;
+    if (!this.opBefore) this.opBefore = this.store.snapshotLayers();
+    l.opacity = v; this.requestRender();
+  }
+  commitLayerOpacity() {
+    if (!this.opBefore) return;
+    const from = this.opBefore; this.opBefore = null;
+    this.store.commitLayersFrom(from);
+  }
+
   // ---- persistence ----
   loadData(d: DocData, thumb = '') {
-    this.store.load(d.strokes, d.history, d.hIdx);
+    this.store.load(d.strokes, d.history, d.hIdx, d.layers ?? defaultLayers());
+    this.activeLayer = d.activeLayer && this.store.layers.some(l => l.id === d.activeLayer) ? d.activeLayer : this.store.layers[this.store.layers.length - 1].id;
     this.view.cam = d.camera; this.wrap = d.wrap;
     this.doc = { id: d.id, name: d.name, createdAt: d.createdAt, updatedAt: d.updatedAt, thumb };
     this.selection.clear(); this.preview = new Map(); this.contentDirty = false;
@@ -134,10 +179,10 @@ export class App {
     clearTimeout(this.saveTimer);
     if (!this.doc.id) return;
     const strokes = [...this.store.strokes.values()];
-    if (this.contentDirty) { this.doc.updatedAt = Date.now(); this.doc.thumb = thumbnail(strokes); this.contentDirty = false; }
+    if (this.contentDirty) { this.doc.updatedAt = Date.now(); this.doc.thumb = thumbnail(strokes, this.store.layers); this.contentDirty = false; }
     const { id, name, createdAt, updatedAt, thumb } = this.doc;
     await saveDoc(
-      { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap } },
+      { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap }, layers: this.store.layers, activeLayer: this.activeLayer },
       { id, name, createdAt, updatedAt, thumb });
   }
 }

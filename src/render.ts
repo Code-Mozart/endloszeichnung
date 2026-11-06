@@ -1,6 +1,7 @@
 import type { App } from './app';
 import { PERIOD as P, Stroke } from './types';
 import { strokeBB, strokePath } from './geom';
+import { groupByLayer, paintLayers, scratchCanvas } from './scene';
 
 function rng(min: number, max: number, vmin: number, vmax: number, wrap: boolean): [number, number] {
   if (!wrap) return max < vmin || min > vmax ? [1, 0] : [0, 0];
@@ -25,20 +26,26 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
   for (let y = Math.floor(vb.minY / step) * step; y <= vb.maxY; y += step) { ctx.moveTo(vb.minX, y); ctx.lineTo(vb.maxX, y); }
   ctx.stroke();
 
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const drawAt = (s: Stroke, i: number, j: number, sel: boolean) => {
-    ctx.save(); ctx.translate(i * P, j * P);
-    const path = strokePath(s);
-    if (sel) { ctx.strokeStyle = 'rgba(41,121,255,.35)'; ctx.lineWidth = s.width + 9 / zoom; ctx.stroke(path); }
-    ctx.strokeStyle = s.color; ctx.lineWidth = s.width; ctx.stroke(path);
-    ctx.restore();
+  const setup = (c: CanvasRenderingContext2D) => {
+    c.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
+    c.translate(view.w / 2, view.h / 2); c.rotate(rot); c.scale(zoom, zoom); c.translate(-cx, -cy);
+    c.lineCap = 'round'; c.lineJoin = 'round';
   };
-  for (const s0 of app.store.strokes.values()) {
-    const s = app.preview.get(s0.id) ?? s0, bb = strokeBB(s), sel = app.selection.has(s0.id);
+  setup(ctx);
+  const drawOne = (c: CanvasRenderingContext2D, s: Stroke) => {
+    const bb = strokeBB(s), sel = app.selection.has(s.id), path = strokePath(s);
     const [i0, i1] = rng(bb.minX, bb.maxX, vb.minX, vb.maxX, wrap.x);
     const [j0, j1] = rng(bb.minY, bb.maxY, vb.minY, vb.maxY, wrap.y);
-    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) drawAt(s, i, j, sel);
-  }
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      c.save(); c.translate(i * P, j * P);
+      if (sel) { c.globalAlpha = 1; c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path); }
+      c.globalAlpha = s.alpha ?? 1; c.strokeStyle = s.color; c.lineWidth = s.width; c.stroke(path);
+      c.restore();
+    }
+  };
+  const strokes = [...app.store.strokes.values()].map(s => app.preview.get(s.id) ?? s);
+  paintLayers(ctx, app.store.layers, groupByLayer(strokes, app.store.layers),
+    () => scratchCanvas(ctx.canvas.width, ctx.canvas.height), setup, drawOne);
 
   // subtle seam lines
   if (wrap.x || wrap.y) {

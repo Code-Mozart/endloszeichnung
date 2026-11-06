@@ -1,8 +1,15 @@
 import { delMany, get, getMany, keys, set, setMany } from 'idb-keyval';
-import type { DocData, Meta } from './types';
+import { DocData, Meta, defaultLayers } from './types';
 
 export const saveDoc = (d: DocData, m: Meta) => setMany([['doc:' + d.id, d], ['meta:' + d.id, m]]);
-export const loadDoc = (id: string) => get<DocData>('doc:' + id);
+/** Loads a drawing and fills in fields older saves don't have (layers). */
+export async function loadDoc(id: string): Promise<DocData | undefined> {
+  const d = await get<DocData>('doc:' + id);
+  if (!d) return d;
+  if (!d.layers?.length) d.layers = defaultLayers();
+  if (!d.activeLayer || !d.layers.some(l => l.id === d.activeLayer)) d.activeLayer = d.layers[d.layers.length - 1].id;
+  return d;
+}
 export const deleteDoc = (id: string) => delMany(['doc:' + id, 'meta:' + id]);
 export const setLast = (id: string) => set('last', id);
 export const getLast = () => get<string>('last');

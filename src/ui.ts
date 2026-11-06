@@ -2,6 +2,7 @@ import type { App } from './app';
 import type { ToolId } from './tools/tool';
 import { deleteDoc, listMetas, loadDoc } from './persist';
 import { download, toBlob, toSVG } from './exporter';
+import { Layer, defaultLayers } from './types';
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const SWATCHES = ['#1a1a1a', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#ffffff'];
@@ -11,7 +12,7 @@ export function setupUI(app: App) {
   let timer = 0, held = 0;
   const show = () => { if (held > 0) return schedule(); document.body.classList.remove('ui-hidden'); };
   const schedule = () => { clearTimeout(timer); timer = window.setTimeout(show, 300); };
-  const activity = () => { document.body.classList.add('ui-hidden'); $('#style').classList.add('off'); schedule(); };
+  const activity = () => { document.body.classList.add('ui-hidden'); $('#style').classList.add('off'); $('#layers').classList.add('off'); schedule(); };
 
   // ---- toolbar ----
   document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => b.onclick = () => {
@@ -24,13 +25,28 @@ export function setupUI(app: App) {
   $('#undo').onclick = () => app.store.undo();
   $('#redo').onclick = () => app.store.redo();
   $('#north').onclick = () => app.unlockRotation();
-  $('#styleBtn').onclick = () => $('#style').classList.toggle('off');
+  $('#styleBtn').onclick = () => { $('#layers').classList.add('off'); $('#style').classList.toggle('off'); };
+  $('#layersBtn').onclick = () => { $('#style').classList.add('off'); $('#layers').classList.toggle('off'); renderLayers(); };
+
+  // ---- second toolbar row (persisted per device) ----
+  const row2 = $('#row2'), bar = $('#bar');
+  const setRow2 = (open: boolean) => {
+    row2.classList.toggle('off', !open);
+    $('#moreArrow').innerHTML = open ? '<path d="m6 9 6 6 6-6"/>' : '<path d="m6 15 6-6 6 6"/>';
+    $('#moreLbl').textContent = open ? 'Less' : 'More';
+    try { localStorage.setItem('bar2', open ? '1' : '0'); } catch { /* ignore */ }
+  };
+  let open2 = false; try { open2 = localStorage.getItem('bar2') === '1'; } catch { /* ignore */ }
+  setRow2(open2);
+  $('#moreBtn').onclick = () => setRow2(row2.classList.contains('off'));
+  // popovers sit right above the toolbar, whatever its height
+  new ResizeObserver(() => document.documentElement.style.setProperty('--barh', bar.offsetHeight + 'px')).observe(bar);
 
   // ---- long-press tooltips ----
   const TIPS: Record<string, string> = {
     pen: 'Pen: draw', eraseBtn: 'Eraser: cuts strokes', selBtn: 'Lasso select (tap again: clear selection)',
     wrapBtn: 'Wrap: tap to activate, tap again to cycle none / vertical / horizontal / both',
-    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export',
+    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, opacity', moreBtn: 'Show or hide the second toolbar row',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
@@ -108,6 +124,40 @@ export function setupUI(app: App) {
   hue.onchange = () => pick(true);
   width.oninput = () => { app.setStyle({ width: +width.value }, false); $('#wval').textContent = (+width.value).toFixed(1); };
   width.onchange = () => app.setStyle({ width: +width.value }, true);
+  const alpha = $<HTMLInputElement>('#alpha');
+  alpha.oninput = () => { app.setStyle({ alpha: +alpha.value / 100 }, false); $('#aval').textContent = alpha.value + '%'; };
+  alpha.onchange = () => app.setStyle({ alpha: +alpha.value / 100 }, true);
+  const rgba = (c: string, a: number) => `rgba(${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)},${a})`;
+
+  // ---- layers popup ----
+  const llist = $('#llist');
+  let sliding = false;
+  function renderLayers() {
+    if ($('#layers').classList.contains('off')) return;
+    if (sliding) return; // don't rebuild under a dragged slider
+    llist.innerHTML = '';
+    const ls = app.store.layers;
+    [...ls].reverse().forEach((l: Layer) => {
+      const i = ls.indexOf(l), row = document.createElement('div');
+      row.className = 'lrow' + (l.id === app.activeLayer ? ' cur' : '') + (l.visible ? '' : ' hid');
+      const btn = (txt: string, fn: () => void, dis = false, cls = '') => {
+        const b = document.createElement('button'); b.textContent = txt; b.className = cls; b.disabled = dis; b.onclick = fn; row.appendChild(b); return b;
+      };
+      btn(l.visible ? '👁' : '🚫', () => app.toggleLayerVisible(l.id));
+      btn(l.name, () => app.setActiveLayer(l.id), false, 'nm');
+      const r = document.createElement('input'); r.type = 'range'; r.min = '0'; r.max = '100'; r.value = String(Math.round(l.opacity * 100)); r.title = 'Layer opacity';
+      r.oninput = () => app.layerOpacityLive(l.id, +r.value / 100);
+      r.onpointerdown = () => { sliding = true; };
+      r.onchange = () => { sliding = false; app.commitLayerOpacity(); };
+      r.onpointerup = () => { sliding = false; };
+      row.appendChild(r);
+      btn('▲', () => app.moveLayer(l.id, 1), i === ls.length - 1);
+      btn('▼', () => app.moveLayer(l.id, -1), i === 0);
+      btn('🗑', () => app.removeLayer(l.id), ls.length <= 1);
+      llist.appendChild(row);
+    });
+  }
+  $('#addLayer').onclick = () => app.addLayer();
 
   const WL = ['off', 'V', 'H', 'V+H'];
   const refresh = () => {
@@ -120,13 +170,17 @@ export function setupUI(app: App) {
     const del = app.toolId === 'select' && app.selection.size > 0;
     $('#eraseIcon').textContent = del ? '🗑️' : '🧽'; $('#eraseLbl').textContent = del ? 'Delete' : 'Erase';
     const st = app.styleView();
-    $('#dot').style.background = st.color;
+    $('#dot').style.background = rgba(st.color, st.alpha);
+    $('#alpha').style.setProperty('--c', st.color);
+    if (document.activeElement !== alpha) alpha.value = String(Math.round(st.alpha * 100));
+    $('#aval').textContent = Math.round(st.alpha * 100) + '%';
     if (!dragging && st.color.toLowerCase() !== hex()) { fromHex(st.color); paintPicker(); }
     if (document.activeElement !== width) { width.value = String(st.width); }
     $('#wval').textContent = st.width.toFixed(1);
     $('#north').classList.toggle('unlocked', !app.rotLocked);
     $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🧭';
     $('#rotLbl').textContent = 'Rot ' + (app.heading() ?? '–');
+    renderLayers();
   };
   app.onNotify(refresh); refresh();
 
@@ -155,8 +209,8 @@ export function setupUI(app: App) {
         }
         const d = await loadDoc(m.id); if (!d) return;
         const base = m.name.replace(/[^\w-]+/g, '_');
-        if (k === 'svg') download(new Blob([toSVG(d.strokes)], { type: 'image/svg+xml' }), base + '.svg');
-        else download(await toBlob(d.strokes, k === 'png' ? 'image/png' : 'image/jpeg'), base + '.' + k);
+        if (k === 'svg') download(new Blob([toSVG(d.strokes, d.layers ?? defaultLayers())], { type: 'image/svg+xml' }), base + '.svg');
+        else download(await toBlob(d.strokes, d.layers ?? defaultLayers(), k === 'png' ? 'image/png' : 'image/jpeg'), base + '.' + k);
       };
       list.appendChild(card);
     }
