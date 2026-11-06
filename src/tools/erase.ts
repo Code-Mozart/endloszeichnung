@@ -51,7 +51,7 @@ export class EraseTool implements Tool {
     const { store, wrap } = this.app, r = this.radius();
     const rm: Stroke[] = [], add: Stroke[] = [];
     for (const s of [...store.strokes.values()]) {
-      if (!store.isVisible(s)) continue;
+      if (store.layerOf(s) !== this.app.activeLayer || !store.isVisible(s)) continue; // erase only on the active layer
       const bb = strokeBB(s);
       if (!wrap.x && (x < bb.minX - r || x > bb.maxX + r)) continue;
       if (!wrap.y && (y < bb.minY - r || y > bb.maxY + r)) continue;
