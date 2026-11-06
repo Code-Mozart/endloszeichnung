@@ -1,10 +1,10 @@
-import { Diff, Layer, Stroke, MAX_HISTORY, defaultLayers } from './types';
+import { Diff, Layer, Obj, MAX_HISTORY, defaultLayers } from './types';
 
 const cloneLayers = (l: Layer[]) => l.map(x => ({ ...x }));
 
 /** Document model. All edits go through apply()/record(); undo history is diff-based (strokes + layer list). */
 export class Store {
-  strokes = new Map<string, Stroke>();
+  strokes = new Map<string, Obj>();
   layers: Layer[] = defaultLayers(); // bottom -> top
   history: Diff[] = [];
   hIdx = 0;
@@ -14,14 +14,14 @@ export class Store {
   private emit() { this.listeners.forEach(f => f()); }
   private setLayerList(l: Layer[]) { this.layers = l.length ? l : defaultLayers(); this.ids = new Set(this.layers.map(x => x.id)); }
 
-  load(strokes: Stroke[], history: Diff[], hIdx: number, layers: Layer[]) {
+  load(strokes: Obj[], history: Diff[], hIdx: number, layers: Layer[]) {
     this.strokes = new Map(strokes.map(s => [s.id, s]));
     this.setLayerList(cloneLayers(layers));
     this.history = history; this.hIdx = hIdx; this.emit();
   }
   /** Layer a stroke lives in; unknown or missing layers fall back to the bottom layer. */
-  layerOf(s: Stroke): string { return s.layer && this.ids.has(s.layer) ? s.layer : this.layers[0].id; }
-  isVisible(s: Stroke): boolean { const id = this.layerOf(s); return !!this.layers.find(l => l.id === id)?.visible; }
+  layerOf(s: Obj): string { return s.layer && this.ids.has(s.layer) ? s.layer : this.layers[0].id; }
+  isVisible(s: Obj): boolean { const id = this.layerOf(s); return !!this.layers.find(l => l.id === id)?.visible; }
 
   /** Apply without recording (live gesture previews). */
   applyLive(d: Diff) {
@@ -53,7 +53,7 @@ export class Store {
   }
 
   /** Change the layer list (and optionally delete strokes along with it) as one undo step. */
-  setLayers(to: Layer[], removed: Stroke[] = []) {
+  setLayers(to: Layer[], removed: Obj[] = []) {
     this.apply({ removed, added: [], layers: { from: cloneLayers(this.layers), to: cloneLayers(to) } });
   }
   /** Record a layer change that was already applied live (e.g. dragging an opacity slider). */
@@ -65,9 +65,9 @@ export class Store {
 
 /** Accumulates many live diffs of one gesture into a single net history step. */
 export class DiffBuilder {
-  private orig = new Map<string, Stroke>();
-  private added = new Map<string, Stroke>();
-  remove(s: Stroke) { if (this.added.has(s.id)) this.added.delete(s.id); else this.orig.set(s.id, s); }
-  add(s: Stroke) { this.added.set(s.id, s); }
+  private orig = new Map<string, Obj>();
+  private added = new Map<string, Obj>();
+  remove(s: Obj) { if (this.added.has(s.id)) this.added.delete(s.id); else this.orig.set(s.id, s); }
+  add(s: Obj) { this.added.set(s.id, s); }
   toDiff(): Diff { return { removed: [...this.orig.values()], added: [...this.added.values()] }; }
 }

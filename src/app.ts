@@ -1,7 +1,8 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DocData, Layer, PERIOD, Stroke, Wrap, defaultLayers, uid } from './types';
+import { DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, Wrap, defaultLayers, uid } from './types';
+import { Mat, mul, rotateM, scaleM, translateM } from './geom';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
 import { EraseTool } from './tools/erase';
@@ -9,6 +10,7 @@ import { SelectTool } from './tools/select';
 import { WrapTool } from './tools/wrap';
 import { loadDoc, saveDoc, setLast } from './persist';
 import { thumbnail } from './exporter';
+import { preload } from './images';
 
 /** Central app state. Tools, renderer and UI all hang off this. */
 export class App {
@@ -17,7 +19,7 @@ export class App {
   wrap: Wrap = { x: false, y: false };
   toolId: ToolId = 'pen';
   selection = new Set<string>();
-  preview = new Map<string, Stroke>();
+  preview = new Map<string, Obj>();
   pen = { color: '#1a1a1a', width: 3, alpha: 1 };
   activeLayer = 'l1';
   grid = true;
@@ -99,7 +101,8 @@ export class App {
   styleView() {
     if (this.toolId === 'select' && this.selection.size) {
       const s = this.store.strokes.get([...this.selection][0]);
-      if (s) return { color: s.color, width: s.width, alpha: s.alpha ?? 1 };
+      if (s?.type === 'stroke') return { color: s.color, width: s.width, alpha: s.alpha ?? 1 };
+      if (s) return { ...this.pen, alpha: s.alpha ?? 1 };
     }
     return this.pen;
   }
@@ -107,9 +110,23 @@ export class App {
     if (this.toolId === 'select' && this.selection.size) {
       if (!commit) return;
       const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
-      this.store.apply({ removed, added: removed.map(s => ({ ...s, ...patch })) });
+      // images only take opacity; strokes take everything
+      this.store.apply({ removed, added: removed.map(s => (s.type === 'stroke' ? { ...s, ...patch } : patch.alpha === undefined ? s : { ...s, alpha: patch.alpha })) });
     } else Object.assign(this.pen, patch);
     this.notify();
+  }
+
+  // ---- images ----
+  /** Place a gallery image at the center of the view (upright on screen, ~60% of the view) on the active layer and select it. */
+  async addImage(e: GalleryEntry) {
+    await preload([e.id]);
+    const { zoom, rot, cx, cy } = this.view.cam;
+    const k = 0.6 * Math.min(this.view.w / zoom / e.iw, this.view.h / zoom / e.ih);
+    const m: Mat = mul(translateM(cx, cy), mul(rotateM(-rot), mul(scaleM(k, k), translateM(-e.iw / 2, -e.ih / 2))));
+    const obj: ImageObj = { id: uid(), type: 'image', img: e.id, iw: e.iw, ih: e.ih, m, layer: this.activeLayer };
+    this.store.apply({ removed: [], added: [obj] });
+    this.setTool('select'); this.selection = new Set([obj.id]);
+    this.requestRender(); this.notify();
   }
 
   // ---- layers ----
