@@ -20,6 +20,10 @@ export class App {
   preview = new Map<string, Stroke>();
   pen = { color: '#1a1a1a', width: 3 };
   dpr = 1;
+  /** Rotation gesture is locked by default; the rotation button unlocks it briefly. */
+  rotLocked = true;
+  navActive = false;
+  private rotTimer = 0;
   ctx!: CanvasRenderingContext2D;
   tools: Record<ToolId, Tool>;
   doc = { id: '', name: '', createdAt: 0, updatedAt: 0, thumb: '' };
@@ -43,6 +47,18 @@ export class App {
     this.raf = requestAnimationFrame(() => { this.raf = 0; render(this.ctx, this); });
   }
   cameraChanged() { this.scheduleSave(); this.requestRender(); }
+
+  /** Reset rotation to 0 and allow the rotate gesture for 1s or until the next gesture ends. */
+  unlockRotation() {
+    this.view.cam.rot = 0; this.cameraChanged();
+    this.rotLocked = false; this.notify();
+    clearTimeout(this.rotTimer);
+    this.rotTimer = window.setTimeout(() => { if (!this.navActive) this.lockRotation(); }, 1000);
+  }
+  lockRotation() {
+    clearTimeout(this.rotTimer);
+    if (!this.rotLocked) { this.rotLocked = true; this.notify(); }
+  }
 
   setTool(id: ToolId) {
     if (id !== 'select') { this.selection.clear(); this.preview = new Map(); }
