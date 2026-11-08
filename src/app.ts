@@ -1,7 +1,7 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DEFAULT_PEN, DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Wrap, defaultLayers, uid } from './types';
+import { DEFAULT_PEN, DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Stroke, Wrap, defaultLayers, uid } from './types';
 import { Mat, mul, objBB, rotateM, scaleM, strokeClosed, strokeFill, transformObj, translateM, unionBB } from './geom';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
@@ -103,6 +103,20 @@ export class App {
     this.selection.clear();
     this.store.apply({ removed, added: [] });
     this.notify();
+  }
+  /** The polygon the select tool has selected (and only it), if it can be edited. */
+  selectedPolygon(): Stroke | null {
+    if (this.toolId !== 'select' || this.selection.size !== 1) return null;
+    const o = this.store.strokes.get([...this.selection][0]);
+    return o?.type === 'stroke' && o.verts && o.verts.length >= 4 ? o : null;
+  }
+  isEditingPolygon() { return this.toolId === 'poly' && (this.tools.poly as PolyTool).editing; }
+  /** Polygon button: start a new polygon, or edit the selected one (the button then says "Edit"). */
+  polyButton() {
+    const sel = this.selectedPolygon();
+    if (this.toolId === 'poly' && !sel) return; // already there
+    this.setTool('poly');
+    if (sel) { (this.tools.poly as PolyTool).beginEdit(sel); this.notify(); } // refresh the label: it says "Edit" now
   }
   /** Each shape has its own button: activate the shapes tool with that shape. */
   shapeButton(kind: ShapeKind) { this.shapeKind = kind; this.setTool('shapes'); }

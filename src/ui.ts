@@ -11,7 +11,7 @@ const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const SWATCHES = ['#1a1a1a', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#ffffff'];
 
 export function setupUI(app: App) {
-  const POPS = ['#style', '#layers', '#images'];
+  const POPS = ['#style', '#layers', '#images', '#gal'];
   const togglePop = (id: string) => { POPS.forEach(p => { if (p !== id) $(p).classList.add('off'); }); return $(id).classList.toggle('off'); };
   // ---- auto-hide: hide on any canvas interaction, return after 0.3s idle ----
   let timer = 0, held = 0;
@@ -23,6 +23,7 @@ export function setupUI(app: App) {
   document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(b => b.onclick = () => {
     // while something is selected the erase button becomes "delete selected"
     if (b.dataset.tool === 'erase' && app.toolId === 'select' && app.selection.size) app.deleteSelection();
+    else if (b.dataset.tool === 'poly') app.polyButton(); // new polygon, or edit the selected one
     else app.setTool(b.dataset.tool as ToolId);
   });
   $('#selBtn').onclick = () => app.selectButton();
@@ -78,20 +79,30 @@ export function setupUI(app: App) {
     b.addEventListener('click', e => { if (tipShown) { e.stopImmediatePropagation(); e.preventDefault(); tipShown = false; } }, true);
   });
 
-  // ---- pull the toolbar up / down to show / hide the extra rows ----
-  let pull: { id: number; x: number; y: number; done: boolean } | null = null, swallowClick = false;
-  bar.addEventListener('pointerdown', e => { pull = { id: e.pointerId, x: e.clientX, y: e.clientY, done: false }; });
-  bar.addEventListener('pointermove', e => {
+  // ---- pull gestures: swipe up on the toolbar shows the extra rows; swipe down closes an open popup, otherwise hides the rows ----
+  let pull: { id: number; x: number; y: number; done: boolean; fromBar: boolean } | null = null, swallowClick = false;
+  const anyPopup = () => POPS.some(p => !$(p).classList.contains('off'));
+  document.addEventListener('pointerdown', e => {
+    const t = e.target as HTMLElement, fromBar = !!t.closest('#bar');
+    if (!fromBar && !t.closest('.pop')) { pull = null; return; }
+    if (t.closest('input, #sv, .grip')) { pull = null; return; } // sliders, the color square and drag handles keep their own drags
+    const sc = t.closest<HTMLElement>('#list, #llist, #igrid');
+    if (sc && sc.scrollTop > 0) { pull = null; return; } // a scrolled list scrolls instead
+    pull = { id: e.pointerId, x: e.clientX, y: e.clientY, done: false, fromBar };
+  }, true);
+  document.addEventListener('pointermove', e => {
     if (!pull || e.pointerId !== pull.id || pull.done) return;
     const dy = e.clientY - pull.y, dx = e.clientX - pull.x;
     if (Math.abs(dy) > 22 && Math.abs(dy) > 1.5 * Math.abs(dx)) {
+      if (!pull.fromBar && dy < 0) return; // popups only react to being pulled down
       pull.done = true; swallowClick = true; clearTimeout(tipTimer); tip.classList.remove('on'); // not a long-press or a tap
-      setRow2(dy < 0);
+      if (dy > 0 && anyPopup()) POPS.forEach(p => $(p).classList.add('off'));
+      else setRow2(dy < 0);
     }
-  });
-  // the finger may lift over the canvas once the rows have collapsed, so listen on the document
+  }, true);
+  // the finger may lift over the canvas once something has collapsed, so listen on the document
   for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, () => { pull = null; setTimeout(() => { swallowClick = false; }, 50); }, true);
-  bar.addEventListener('click', e => { if (swallowClick) { e.stopImmediatePropagation(); e.preventDefault(); swallowClick = false; } }, true);
+  document.addEventListener('click', e => { if (swallowClick) { e.stopImmediatePropagation(); e.preventDefault(); swallowClick = false; } }, true);
   $('#grip').onclick = () => setRow2(row2.classList.contains('off')); // tapping the handle toggles too
 
   // ---- style popover ----
@@ -151,11 +162,25 @@ export function setupUI(app: App) {
   sv.addEventListener('pointercancel', () => { dragging = false; });
   hue.oninput = () => { hsv.h = +hue.value; pick(false); };
   hue.onchange = () => pick(true);
-  width.oninput = () => { app.setStyle({ width: +width.value }, false); $('#wval').textContent = (+width.value).toFixed(1); };
+  // The thickness and opacity sliders snap to coarse steps. Moving the finger away from the slider gives finer steps,
+  // like scrubbing in a video player: thickness 5 -> fine, opacity 20 -> 10 -> 5 -> fine.
+  const snapHint = $('#snapHint'), HINT_IDLE = snapHint.textContent ?? '';
+  function snappySlider(input: HTMLInputElement, level: (distPx: number) => { step: number; label: string }, min: (step: number) => number) {
+    let cy = 0, dist = 0, sliding = false;
+    const show = () => { snapHint.textContent = level(dist).label; snapHint.classList.add('live'); };
+    input.addEventListener('pointerdown', e => { const r = input.getBoundingClientRect(); cy = r.top + r.height / 2; sliding = true; dist = Math.abs(e.clientY - cy); show(); });
+    document.addEventListener('pointermove', e => { if (sliding) { dist = Math.abs(e.clientY - cy); show(); } }, true);
+    const end = () => { if (sliding) { sliding = false; snapHint.textContent = HINT_IDLE; snapHint.classList.remove('live'); } };
+    document.addEventListener('pointerup', end, true); document.addEventListener('pointercancel', end, true);
+    return (raw: number) => { if (!sliding) return raw; const { step } = level(dist); return Math.max(min(step), Math.round(raw / step) * step); };
+  }
+  const widthSnap = snappySlider(width, d => (d < 60 ? { step: 5, label: 'Step 5 · drag away from the slider for finer steps' } : { step: 0.5, label: 'Fine steps' }), () => 0.5);
+  width.oninput = () => { width.value = String(widthSnap(+width.value)); app.setStyle({ width: +width.value }, false); $('#wval').textContent = (+width.value).toFixed(1); };
   width.onchange = () => app.setStyle({ width: +width.value }, true);
   const alpha = $<HTMLInputElement>('#alpha');
+  const alphaSnap = snappySlider(alpha, d => (d < 44 ? { step: 20, label: 'Step 20% · drag away from the slider for finer steps' } : d < 88 ? { step: 10, label: 'Step 10%' } : d < 132 ? { step: 5, label: 'Step 5%' } : { step: 1, label: 'Fine steps' }), step => step);
   const alphaPatch = () => (target === 'fill' ? { fillAlpha: +alpha.value / 100 } : { alpha: +alpha.value / 100 });
-  alpha.oninput = () => { app.setStyle(alphaPatch(), false); $('#aval').textContent = alpha.value + '%'; };
+  alpha.oninput = () => { alpha.value = String(alphaSnap(+alpha.value)); app.setStyle(alphaPatch(), false); $('#aval').textContent = alpha.value + '%'; };
   alpha.onchange = () => app.setStyle(alphaPatch(), true);
   const rgba = (c: string, a: number) => `rgba(${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)},${a})`;
 
@@ -324,6 +349,7 @@ export function setupUI(app: App) {
     $('#rotIcon').textContent = app.rotLocked ? '🔒' : '🧭';
     $('#rotLbl').textContent = 'Rot ' + (app.heading() ?? '–');
     $('#gridBtn').classList.toggle('toggled', app.grid);
+    $('#polyLbl').textContent = app.selectedPolygon() || app.isEditingPolygon() ? 'Edit' : 'Polygon';
     $('#wrapBtn').classList.toggle('toggled', app.wrap.x || app.wrap.y);
     const hasSel = app.toolId === 'select' && app.selection.size > 0;
     $<HTMLButtonElement>('#cutBtn').disabled = !hasSel; $<HTMLButtonElement>('#copyBtn').disabled = !hasSel;
@@ -336,7 +362,7 @@ export function setupUI(app: App) {
   // ---- gallery ----
   const fmt = (t: number) => new Date(t).toLocaleString();
   const gal = $('#gal');
-  async function openGallery() {
+  async function renderFiles() {
     await app.flush();
     const list = $('#list'); list.innerHTML = '';
     for (const m of await listMetas()) {
@@ -354,7 +380,7 @@ export function setupUI(app: App) {
           if (!confirm('Delete this drawing?')) return;
           await deleteDoc(m.id);
           if (m.id === app.doc.id) { app.doc.id = ''; app.newDoc(); }
-          return openGallery();
+          return renderFiles();
         }
         const d = await loadDoc(m.id); if (!d) return;
         const base = m.name.replace(/[^\w-]+/g, '_');
@@ -363,10 +389,9 @@ export function setupUI(app: App) {
       };
       list.appendChild(card);
     }
-    gal.classList.remove('off');
   }
-  $('#files').onclick = openGallery;
-  $('#closeGal').onclick = () => gal.classList.add('off');
+  $('#appver').textContent = 'Endloszeichnung ' + (__APP_VERSION__ === 'dev' ? 'dev build' : 'v' + __APP_VERSION__);
+  $('#files').onclick = () => { if (!togglePop('#gal')) renderFiles(); };
   $('#newDoc').onclick = async () => { app.endToolSession(); await app.flush(); app.newDoc(); gal.classList.add('off'); };
 
   return { activity };

@@ -71,7 +71,7 @@ export class PenTool implements Tool {
     if (join) {
       const pts = join.atStart ? reversePts(join.s.pts) : [...join.s.pts];
       this.old = join.s; this.base = pts; this.origin = [pts[pts.length - 2], pts[pts.length - 1]];
-      this.s = { ...join.s, pts: [...pts] }; // same id: it is the same stroke, just longer
+      this.s = { ...join.s, pts: [...pts], verts: undefined }; // same id: it is the same stroke, just longer
       store.applyLive({ removed: [join.s], added: [this.s] });
     } else {
       this.old = null; this.base = []; this.origin = [p.wx, p.wy];
@@ -104,7 +104,7 @@ export class PenTool implements Tool {
       const n = s.pts.length, t = this.findJoin(s.pts[n - 2], s.pts[n - 1], s.id);
       if (t) {
         const mpts = t.atStart ? [...s.pts, ...t.s.pts] : [...s.pts, ...reversePts(t.s.pts)];
-        const merged: Stroke = { ...s, pts: mpts, closed: isClosedPts(mpts) };
+        const merged: Stroke = { ...s, pts: mpts, closed: isClosedPts(mpts), verts: undefined };
         store.applyLive({ removed: [s, t.s], added: [merged] });
         store.record({ removed: this.old ? [this.old, t.s] : [t.s], added: [merged] });
       } else store.record({ removed: this.old ? [this.old] : [], added: [s] });

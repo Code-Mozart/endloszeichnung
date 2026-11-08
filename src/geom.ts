@@ -18,7 +18,9 @@ export function transformStroke(s: Stroke, m: Mat): Stroke {
     pts[i] = m[0] * x + m[2] * y + m[4];
     pts[i + 1] = m[1] * x + m[3] * y + m[5];
   }
-  return { ...s, pts }; // thickness is a style, not geometry: it stays the same when scaling
+  let verts: number[] | undefined;
+  if (s.verts) { verts = new Array<number>(s.verts.length); for (let i = 0; i < verts.length; i += 2) { const x = s.verts[i], y = s.verts[i + 1]; verts[i] = m[0] * x + m[2] * y + m[4]; verts[i + 1] = m[1] * x + m[3] * y + m[5]; } }
+  return verts ? { ...s, pts, verts } : { ...s, pts }; // thickness is a style, not geometry: it stays the same when scaling
 }
 
 /** Transform a stroke or image by an affine matrix (images just compose the matrix). */
