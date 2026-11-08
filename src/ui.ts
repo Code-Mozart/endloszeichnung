@@ -14,7 +14,11 @@ const SWATCHES = ['#1a1a1a', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e
 
 export function setupUI(app: App) {
   const POPS = ['#style', '#layers', '#images', '#gal'];
-  const togglePop = (id: string) => { POPS.forEach(p => { if (p !== id) $(p).classList.add('off'); }); return $(id).classList.toggle('off'); };
+  const togglePop = (id: string) => {
+    if (id === '#style' && $(id).classList.contains('off')) fillMode = false; // opening the style popup: start by editing the line
+    POPS.forEach(p => { if (p !== id) $(p).classList.add('off'); });
+    return $(id).classList.toggle('off');
+  };
   // ---- auto-hide: hide on any canvas interaction, return after 0.3s idle ----
   let timer = 0, held = 0;
   const show = () => { if (held > 0) return schedule(); document.body.classList.remove('ui-hidden'); };
@@ -114,11 +118,13 @@ export function setupUI(app: App) {
   $('#grip').onclick = () => setRow2(row2.classList.contains('off')); // tapping the handle toggles too
 
   // ---- style popover ----
-  // the color swatches, picker and opacity slider edit either the line or the fill
-  let target: 'line' | 'fill' = 'line';
-  const colorPatch = (c: string) => (target === 'fill' ? { fill: c } : { color: c });
+  // The swatches, picker and opacity slider edit the line. Tapping the Fill button makes them edit the fill for ONE choice:
+  // the next color you pick, or the next opacity change (it ends when the finger lifts).
+  let fillMode = false;
+  const colorPatch = (c: string) => (fillMode ? { fill: c } : { color: c });
+  const endFillMode = () => { if (fillMode) { fillMode = false; refresh(); } };
   const sw = $('#swatches');
-  SWATCHES.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle(colorPatch(c), true); sw.appendChild(b); });
+  SWATCHES.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => { app.setStyle(colorPatch(c), true); endFillMode(); }; sw.appendChild(b); });
   // recently used custom colors (persisted per device)
   const RECENT_N = 8, RKEY = 'recentColors';
   let recent: string[] = [];
@@ -126,7 +132,7 @@ export function setupUI(app: App) {
   const rec = $('#recent');
   const paintRecent = () => {
     rec.innerHTML = ''; rec.classList.toggle('off', !recent.length);
-    recent.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle(colorPatch(c), true); rec.appendChild(b); });
+    recent.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => { app.setStyle(colorPatch(c), true); endFillMode(); }; rec.appendChild(b); });
   };
   const remember = (c: string) => {
     c = c.toLowerCase();
@@ -134,8 +140,7 @@ export function setupUI(app: App) {
     recent = [c, ...recent.filter(x => x !== c)].slice(0, RECENT_N); paintRecent();
     try { localStorage.setItem(RKEY, JSON.stringify(recent)); } catch { /* ignore */ }
   };
-  let rememberTimer = 0; // a color counts once the user stops fiddling for a moment
-  const rememberSoon = (c: string) => { clearTimeout(rememberTimer); rememberTimer = window.setTimeout(() => remember(c), 1200); };
+  app.onColorUsed(remember); // only colors that were used on the canvas are remembered
   paintRecent();
   const more = document.createElement('b'); more.className = 'more'; more.title = 'More colors';
   more.onclick = () => $('#picker').classList.toggle('off'); sw.appendChild(more);
@@ -158,7 +163,7 @@ export function setupUI(app: App) {
     svc.style.left = hsv.s * 100 + '%'; svc.style.top = (1 - hsv.v) * 100 + '%';
     hue.value = String(Math.round(hsv.h));
   };
-  const pick = (commit: boolean) => { paintPicker(); app.setStyle(colorPatch(hex()), commit); if (commit) rememberSoon(hex()); };
+  const pick = (commit: boolean) => { paintPicker(); app.setStyle(colorPatch(hex()), commit); if (commit) endFillMode(); };
   const svMove = (e: PointerEvent) => {
     const r = sv.getBoundingClientRect();
     hsv.s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); hsv.v = 1 - Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
@@ -173,23 +178,43 @@ export function setupUI(app: App) {
   // The thickness and opacity sliders snap to coarse steps. Moving the finger away from the slider gives finer steps,
   // like scrubbing in a video player: thickness 5 -> fine, opacity 20 -> 10 -> 5 -> fine.
   const snapHint = $('#snapHint'), HINT_IDLE = snapHint.textContent ?? '';
-  function snappySlider(input: HTMLInputElement, level: (distPx: number) => { step: number; label: string }, min: (step: number) => number) {
-    let cy = 0, dist = 0, sliding = false;
+  function snappySlider(input: HTMLInputElement, level: (distPx: number) => { step: number; label: string }, min: (step: number) => number, onRelease?: () => void) {
+    let cy = 0, dist = 0, sliding = false, startVal = 0, nativeChange = false;
     const show = () => { snapHint.textContent = level(dist).label; snapHint.classList.add('live'); };
-    input.addEventListener('pointerdown', e => { const r = input.getBoundingClientRect(); cy = r.top + r.height / 2; sliding = true; dist = Math.abs(e.clientY - cy); show(); });
-    document.addEventListener('pointermove', e => { if (sliding) { dist = Math.abs(e.clientY - cy); show(); } }, true);
-    const end = () => { if (sliding) { sliding = false; snapHint.textContent = HINT_IDLE; snapHint.classList.remove('live'); } };
+    input.addEventListener('pointerdown', e => {
+      const r = input.getBoundingClientRect(); cy = r.top + r.height / 2; sliding = true; dist = Math.abs(e.clientY - cy);
+      startVal = +input.value; nativeChange = false; show();
+    });
+    input.addEventListener('change', () => { nativeChange = true; });
+    document.addEventListener('pointermove', e => {
+      if (!sliding) return;
+      dist = Math.abs(e.clientY - cy); show();
+      // Follow the finger ourselves as well: a touch stops moving the browser's slider once the finger leaves it vertically,
+      // but fine control needs exactly that.
+      const r = input.getBoundingClientRect(), mn = +input.min, mx = +input.max, st = +input.step || 1;
+      const v = Math.round((mn + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (mx - mn)) / st) * st;
+      if (v !== +input.value) { input.value = String(v); input.dispatchEvent(new Event('input')); }
+    }, true);
+    // The browser still reports a value (input/change) as the finger lifts. Keep snapping with the last distance until
+    // that has been processed, otherwise the value jumps to the unsnapped position on release.
+    const end = () => {
+      if (!sliding) return;
+      window.setTimeout(() => {
+        if (!nativeChange && +input.value !== startVal) input.dispatchEvent(new Event('change')); // the browser did not commit (finger was off the slider)
+        sliding = false; snapHint.textContent = HINT_IDLE; snapHint.classList.remove('live'); onRelease?.();
+      }, 80);
+    };
     document.addEventListener('pointerup', end, true); document.addEventListener('pointercancel', end, true);
     return (raw: number) => { if (!sliding) return raw; const { step } = level(dist); return Math.max(min(step), Math.round(raw / step) * step); };
   }
   const widthSnap = snappySlider(width, d => (d < 60 ? { step: 5, label: 'Step 5 · drag away from the slider for finer steps' } : { step: 0.5, label: 'Fine steps' }), () => 0.5);
   width.oninput = () => { width.value = String(widthSnap(+width.value)); app.setStyle({ width: +width.value }, false); $('#wval').textContent = (+width.value).toFixed(1); };
-  width.onchange = () => app.setStyle({ width: +width.value }, true);
+  width.onchange = () => { width.value = String(widthSnap(+width.value)); app.setStyle({ width: +width.value }, true); $('#wval').textContent = (+width.value).toFixed(1); };
   const alpha = $<HTMLInputElement>('#alpha');
-  const alphaSnap = snappySlider(alpha, d => (d < 44 ? { step: 20, label: 'Step 20% · drag away from the slider for finer steps' } : d < 88 ? { step: 10, label: 'Step 10%' } : d < 132 ? { step: 5, label: 'Step 5%' } : { step: 1, label: 'Fine steps' }), step => step);
-  const alphaPatch = () => (target === 'fill' ? { fillAlpha: +alpha.value / 100 } : { alpha: +alpha.value / 100 });
+  const alphaSnap = snappySlider(alpha, d => (d < 44 ? { step: 20, label: 'Step 20% · drag away from the slider for finer steps' } : d < 88 ? { step: 10, label: 'Step 10%' } : d < 132 ? { step: 5, label: 'Step 5%' } : { step: 1, label: 'Fine steps' }), step => step, endFillMode);
+  const alphaPatch = () => (fillMode ? { fillAlpha: +alpha.value / 100 } : { alpha: +alpha.value / 100 });
   alpha.oninput = () => { alpha.value = String(alphaSnap(+alpha.value)); app.setStyle(alphaPatch(), false); $('#aval').textContent = alpha.value + '%'; };
-  alpha.onchange = () => app.setStyle(alphaPatch(), true);
+  alpha.onchange = () => { alpha.value = String(alphaSnap(+alpha.value)); app.setStyle(alphaPatch(), true); $('#aval').textContent = alpha.value + '%'; };
   const rgba = (c: string, a: number) => `rgba(${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)},${a})`;
 
   // ---- layers popup ----
@@ -282,9 +307,11 @@ export function setupUI(app: App) {
       const btn = (parent: HTMLElement, txt: string, fn: () => void, dis = false, cls = '') => {
         const b = mk('button', cls, parent); b.textContent = txt; b.disabled = dis; b.onclick = fn; return b;
       };
-      // thumbnail (tap: make this layer active)
-      const th = mk('canvas', 'lthumb', row); th.width = 128; th.height = 128;
-      th.onclick = () => app.setActiveLayer(l.id);
+      // the thumbnail is the show/hide button (hidden layers: the whole card looks deactivated)
+      const tb = btn(row, '', () => app.toggleLayerVisible(l.id), false, 'lthumb');
+      tb.title = l.visible ? 'Layer is visible: tap to hide it' : 'Layer is hidden: tap to show it';
+      const th = mk('canvas', '', tb); th.width = 128; th.height = 128;
+      mk('span', 'vis', tb).textContent = l.visible ? '👁' : '🚫';
       thumbJobs.push({ canvas: th, objs: groups.get(l.id) ?? [] });
       const body = mk('div', 'lbody', row);
       const nm = btn(body, l.name, () => { if (swallow) { swallow = false; return; } app.setActiveLayer(l.id); }, false, 'nm');
@@ -303,7 +330,6 @@ export function setupUI(app: App) {
       nm.addEventListener('dblclick', rename);
       nm.addEventListener('contextmenu', e => e.preventDefault());
       const ctl = mk('div', 'lctl', body);
-      btn(ctl, l.visible ? '👁' : '🚫', () => app.toggleLayerVisible(l.id), false, 'leye');
       const r = mk('input', '', ctl); r.type = 'range'; r.min = '0'; r.max = '100'; r.value = String(Math.round(l.opacity * 100)); r.title = 'Layer opacity';
       r.oninput = () => app.layerOpacityLive(l.id, +r.value / 100);
       r.onpointerdown = () => { sliding = true; };
@@ -311,11 +337,12 @@ export function setupUI(app: App) {
       r.onpointerup = () => { sliding = false; };
       // this layer's remembered pen style; tapping it copies the style to the active layer (and the pen)
       const st = app.layerStyles[l.id] ?? app.pen;
-      const sw = btn(ctl, '', () => app.copyLayerStyle(l.id), l.id === app.activeLayer, 'lstyle');
+      const col = mk('div', 'lcol', row); // delete on top, style below
+      btn(col, '🗑', () => app.removeLayer(l.id), ls.length <= 1, 'ldel');
+      const sw = btn(col, '', () => app.copyLayerStyle(l.id), l.id === app.activeLayer, 'lstyle');
       // line color as the ring, fill color (if any) inside
       sw.innerHTML = st.fill ? `<u style="background:${rgba(st.fill, st.fillAlpha ?? 1)};border-color:${rgba(st.color, st.alpha)}"></u>` : `<u style="background:${rgba(st.color, st.alpha)}"></u>`;
       sw.title = `Layer style: line ${Math.round(st.alpha * 100)}% opacity, width ${st.width.toFixed(1)}, ${DASH_NAMES[st.dash]}${st.fill ? `, fill ${Math.round((st.fillAlpha ?? 1) * 100)}%` : ', no fill'}. Tap to use it on the active layer`;
-      btn(ctl, '🗑', () => app.removeLayer(l.id), ls.length <= 1, 'ldel');
       const grip = btn(row, '☰', () => {}, ls.length <= 1, 'grip');
       grip.addEventListener('pointerdown', e => startDrag(e, row, grip));
       llist.appendChild(row);
@@ -324,8 +351,8 @@ export function setupUI(app: App) {
   }
   $('#addLayer').onclick = () => app.addLayer();
 
-  document.querySelectorAll<HTMLButtonElement>('#target button').forEach(b => { b.onclick = () => { target = b.dataset.target as 'line' | 'fill'; refresh(); }; });
-  $('#noFill').onclick = () => app.setStyle({ fill: null }, true);
+  $('#noFill').onclick = () => { fillMode = false; app.setStyle({ fill: null }, true); refresh(); };
+  $('#fillBtn').onclick = () => { if (app.fillAvailable()) { fillMode = !fillMode; refresh(); } };
   // line style (solid, dashed, dotted, ...)
   const DASH_NAMES: Record<DashKind, string> = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', dashdot: 'Dash-dot', longdash: 'Long dash' };
   const dashes = $('#dashes');
@@ -348,17 +375,14 @@ export function setupUI(app: App) {
     const st = app.styleView();
     $('#dot').style.background = rgba(st.color, st.alpha);
     const canFill = app.fillAvailable();
-    if (!canFill && target === 'fill') target = 'line';
-    const editing = target === 'fill' ? { color: st.fill ?? st.color, alpha: st.fillAlpha ?? 1 } : { color: st.color, alpha: st.alpha };
+    if (!canFill) fillMode = false;
+    const editing = fillMode ? { color: st.fill ?? st.color, alpha: st.fillAlpha ?? 1 } : { color: st.color, alpha: st.alpha };
     $('#fillSw').style.setProperty('--fc', st.fill ? rgba(st.fill, st.fillAlpha ?? 1) : 'transparent');
-    document.querySelectorAll<HTMLButtonElement>('#target button').forEach(b => {
-      b.classList.toggle('on', b.dataset.target === target);
-      if (b.dataset.target === 'fill') b.disabled = !canFill;
-    });
+    const fb = $<HTMLButtonElement>('#fillBtn'), nf = $<HTMLButtonElement>('#noFill');
+    fb.disabled = nf.disabled = !canFill;
+    fb.classList.toggle('on', fillMode); fb.classList.toggle('set', !fillMode && !!st.fill && canFill); nf.classList.toggle('set', !st.fill && canFill);
     $('#fillHint').style.display = canFill ? 'none' : '';
-    document.querySelectorAll('.line-only').forEach(e => e.classList.toggle('hide', target === 'fill'));
-    $('#nofillRow').classList.toggle('hide', target !== 'fill');
-    $('#noFill').classList.toggle('on', !st.fill);
+    $('#widthRow').classList.toggle('dim', fillMode); $('#styleRow').classList.toggle('dim', fillMode); // width and line style don't apply to the fill
     $('#alpha').style.setProperty('--c', editing.color);
     if (document.activeElement !== alpha) alpha.value = String(Math.round(editing.alpha * 100));
     $('#aval').textContent = Math.round(editing.alpha * 100) + '%';

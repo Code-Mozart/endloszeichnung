@@ -75,7 +75,7 @@ export class ShapeTool implements Tool {
   up(p: PInfo) {
     const s = this.s, a = this.start; if (!s || !a) return;
     if (Math.hypot(p.sx - a.sx, p.sy - a.sy) < MIN_DRAG_PX) this.app.store.applyLive({ removed: [s], added: [] }); // a tap draws nothing
-    else { s.pts = this.build(p); invalidate(s); this.app.store.record({ removed: [], added: [s] }); }
+    else { s.pts = this.build(p); invalidate(s); this.app.store.record({ removed: [], added: [s] }); this.app.colorUsed(s.color, s.closed ? s.fill : null); }
     this.s = null; this.start = null;
   }
   cancel() {

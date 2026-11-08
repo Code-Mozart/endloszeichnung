@@ -113,6 +113,7 @@ export class PolyTool implements Tool {
       color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, closed, layer: activeLayer,
     };
     store.apply({ removed: [], added: [s] });
+    this.app.colorUsed(s.color, closed ? s.fill : null);
     this.app.requestRender(); this.app.notify();
   }
   /** Edit mode: replace the stroke by one with the current vertices (live; recorded when the finger lifts). */

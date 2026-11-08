@@ -177,6 +177,7 @@ export class App {
       if (!commit) return;
       const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
       // images only take opacity; strokes take everything
+      this.colorUsed(patch.color, patch.fill);
       const { fill, fillAlpha, ...rest } = patch;
       this.store.apply({
         removed,
@@ -220,6 +221,13 @@ export class App {
   setActiveLayer(id: string) {
     if (id !== this.activeLayer) { this.selection.clear(); this.activate(id); }
     this.scheduleSave(); this.notify();
+  }
+  // ---- colors that were actually used on the canvas (the recent-colors list listens) ----
+  private colorCallbacks: ((c: string) => void)[] = [];
+  onColorUsed(fn: (c: string) => void) { this.colorCallbacks.push(fn); }
+  /** A stroke/shape/polygon was committed (or restyled): report its line color and, for closed shapes, its fill color. */
+  colorUsed(...colors: (string | boolean | null | undefined)[]) {
+    for (const c of colors) if (typeof c === 'string') this.colorCallbacks.forEach(f => f(c));
   }
   /** Take over another layer's remembered style for the active layer (and the pen). */
   copyLayerStyle(fromId: string) {
