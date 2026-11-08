@@ -1,11 +1,12 @@
 export type DashKind = 'solid' | 'dashed' | 'dotted' | 'dashdot' | 'longdash';
 export const DASH_KINDS: DashKind[] = ['solid', 'dashed', 'dotted', 'dashdot', 'longdash'];
-export interface Stroke { id: string; type: 'stroke'; pts: number[]; color: string; width: number; alpha?: number; layer?: string; dash?: DashKind }
+export interface Stroke { id: string; type: 'stroke'; pts: number[]; color: string; width: number; alpha?: number; layer?: string; dash?: DashKind; closed?: boolean; fill?: boolean }
 /** A raster image placed in the drawing. `m` maps image pixels (0..iw, 0..ih) to world coordinates. */
 export interface ImageObj { id: string; type: 'image'; img: string; iw: number; ih: number; m: [number, number, number, number, number, number]; alpha?: number; layer?: string }
 export type Obj = Stroke | ImageObj;
 /** Drawing style of the pen and shapes. Remembered per layer; it does not restyle existing objects. */
-export interface PenStyle { color: string; width: number; alpha: number; dash: DashKind }
+export interface PenStyle { color: string; width: number; alpha: number; dash: DashKind; fill: boolean }
+export const DEFAULT_PEN: PenStyle = { color: '#1a1a1a', width: 3, alpha: 1, dash: 'solid', fill: false };
 export interface Layer { id: string; name: string; opacity: number; visible: boolean }
 export const defaultLayers = (): Layer[] => [{ id: 'l1', name: 'Layer 1', opacity: 1, visible: true }];
 /** One undoable step: remove `removed` (by id), then append `added`. */

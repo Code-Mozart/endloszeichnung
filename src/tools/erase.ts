@@ -28,7 +28,7 @@ function eraseStroke(s: Stroke, x: number, y: number, r: number, wx: boolean, wy
   const out: Stroke[] = [];
   let cur: number[] = [];
   const flush = () => {
-    if (cur.length) out.push({ ...s, id: uid(), pts: cur });
+    if (cur.length) out.push({ ...s, id: uid(), pts: cur, closed: false });
     cur = [];
   };
   for (let i = 0; i < n; i++) {

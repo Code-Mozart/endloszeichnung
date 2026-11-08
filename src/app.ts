@@ -1,13 +1,14 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Wrap, defaultLayers, uid } from './types';
-import { Mat, mul, objBB, rotateM, scaleM, transformObj, translateM, unionBB } from './geom';
+import { DEFAULT_PEN, DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Wrap, defaultLayers, uid } from './types';
+import { Mat, mul, objBB, rotateM, scaleM, strokeClosed, transformObj, translateM, unionBB } from './geom';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
 import { EraseTool } from './tools/erase';
 import { SelectTool } from './tools/select';
 import { ShapeKind, ShapeTool } from './tools/shapes';
+import { PolyTool } from './tools/poly';
 import { loadDoc, saveDoc, setLast } from './persist';
 import { thumbnail } from './exporter';
 import { preload } from './images';
@@ -20,7 +21,7 @@ export class App {
   toolId: ToolId = 'pen';
   selection = new Set<string>();
   preview = new Map<string, Obj>();
-  pen: PenStyle = { color: '#1a1a1a', width: 3, alpha: 1, dash: 'solid' };
+  pen: PenStyle = { ...DEFAULT_PEN };
   /** Pen style remembered per layer (saved with the drawing, not part of undo). */
   layerStyles: Record<string, PenStyle> = {};
   clipboard: Obj[] = [];
@@ -42,7 +43,7 @@ export class App {
   private contentDirty = false;
 
   constructor() {
-    this.tools = { pen: new PenTool(this), erase: new EraseTool(this), select: new SelectTool(this), shapes: new ShapeTool(this) };
+    this.tools = { pen: new PenTool(this), erase: new EraseTool(this), select: new SelectTool(this), shapes: new ShapeTool(this), poly: new PolyTool(this) };
     this.store.onChange(() => {
       for (const id of this.selection) if (!this.store.strokes.has(id)) this.selection.delete(id);
       if (!this.store.layers.some(l => l.id === this.activeLayer)) this.activate(this.store.layers[this.store.layers.length - 1].id);
@@ -80,6 +81,7 @@ export class App {
   }
 
   setTool(id: ToolId) {
+    if (id !== this.toolId) this.activeTool().deactivate?.(); // e.g. finish a polyline in progress
     if (id !== 'select') { this.selection.clear(); this.preview = new Map(); }
     this.toolId = id; this.requestRender(); this.notify();
   }
@@ -125,17 +127,38 @@ export class App {
   styleView() {
     if (this.toolId === 'select' && this.selection.size) {
       const s = this.store.strokes.get([...this.selection][0]);
-      if (s?.type === 'stroke') return { color: s.color, width: s.width, alpha: s.alpha ?? 1, dash: s.dash ?? 'solid' };
+      if (s?.type === 'stroke') {
+        const closed = [...this.selection].map(id => this.store.strokes.get(id)).find(o => o?.type === 'stroke' && strokeClosed(o));
+        return { color: s.color, width: s.width, alpha: s.alpha ?? 1, dash: s.dash ?? 'solid', fill: closed?.type === 'stroke' ? !!closed.fill : false };
+      }
       if (s) return { ...this.pen, alpha: s.alpha ?? 1 };
     }
     return this.pen;
   }
-  setStyle(patch: { color?: string; width?: number; alpha?: number; dash?: DashKind }, commit: boolean) {
+  /** Fill only makes sense for closed shapes: not for lines and arrows, nor for a selection without any closed shape. */
+  fillAvailable(): boolean {
+    if (this.toolId === 'select' && this.selection.size) {
+      return [...this.selection].some(id => { const o = this.store.strokes.get(id); return o?.type === 'stroke' && strokeClosed(o); });
+    }
+    return !(this.toolId === 'shapes' && (this.shapeKind === 'line' || this.shapeKind === 'arrow'));
+  }
+  /** Finish whatever the active tool has in progress (before switching drawings). */
+  endToolSession() { this.activeTool().deactivate?.(); }
+  setStyle(patch: { color?: string; width?: number; alpha?: number; dash?: DashKind; fill?: boolean }, commit: boolean) {
     if (this.toolId === 'select' && this.selection.size) {
       if (!commit) return;
       const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
       // images only take opacity; strokes take everything
-      this.store.apply({ removed, added: removed.map(s => (s.type === 'stroke' ? { ...s, ...patch } : patch.alpha === undefined ? s : { ...s, alpha: patch.alpha })) });
+      const { fill, ...rest } = patch;
+      this.store.apply({
+        removed,
+        added: removed.map(s => {
+          if (s.type !== 'stroke') return patch.alpha === undefined ? s : { ...s, alpha: patch.alpha };
+          const ns = { ...s, ...rest };
+          if (fill !== undefined && strokeClosed(s)) ns.fill = fill; // fill only applies to closed shapes
+          return ns;
+        }),
+      });
     } else {
       Object.assign(this.pen, patch);
       this.layerStyles[this.activeLayer] = { ...this.pen }; this.scheduleSave();
@@ -160,7 +183,7 @@ export class App {
   /** Make a layer active and switch the pen to that layer's style (a layer without one starts with the current style). */
   private activate(id: string) {
     this.activeLayer = id;
-    this.pen = { ...(this.layerStyles[id] ?? this.pen) };
+    this.pen = { ...DEFAULT_PEN, ...(this.layerStyles[id] ?? this.pen) };
     this.layerStyles[id] = { ...this.pen };
   }
   setActiveLayer(id: string) {
@@ -225,7 +248,7 @@ export class App {
     this.store.load(d.strokes, d.history, d.hIdx, d.layers ?? defaultLayers());
     this.layerStyles = { ...(d.layerStyles ?? {}) };
     const act = d.activeLayer && this.store.layers.some(l => l.id === d.activeLayer) ? d.activeLayer : this.store.layers[this.store.layers.length - 1].id;
-    this.pen = { color: '#1a1a1a', width: 3, alpha: 1, dash: 'solid' }; // layers without a stored style start from the default
+    this.pen = { ...DEFAULT_PEN }; // layers without a stored style start from the default
     this.activate(act);
     this.view.cam = d.camera; this.wrap = d.wrap; this.grid = d.grid ?? true;
     this.doc = { id: d.id, name: d.name, createdAt: d.createdAt, updatedAt: d.updatedAt, thumb };
@@ -241,6 +264,7 @@ export class App {
     this.contentDirty = true; this.scheduleSave();
   }
   async openDoc(id: string) {
+    this.endToolSession();
     await this.flush();
     const d = await loadDoc(id);
     if (d) this.loadData(d);

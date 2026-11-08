@@ -43,13 +43,10 @@ export function setupUI(app: App) {
   const row2 = $('#row2'), bar = $('#bar');
   const setRow2 = (open: boolean) => {
     row2.classList.toggle('off', !open); $('#row3').classList.toggle('off', !open);
-    $('#moreArrow').innerHTML = open ? '<path d="m6 9 6 6 6-6"/>' : '<path d="m6 15 6-6 6 6"/>';
-    $('#moreLbl').textContent = open ? 'Less' : 'More';
     try { localStorage.setItem('bar2', open ? '1' : '0'); } catch { /* ignore */ }
   };
   let open2 = false; try { open2 = localStorage.getItem('bar2') === '1'; } catch { /* ignore */ }
   setRow2(open2);
-  $('#moreBtn').onclick = () => setRow2(row2.classList.contains('off'));
   // popovers sit right above the toolbar, whatever its height
   new ResizeObserver(() => document.documentElement.style.setProperty('--barh', bar.offsetHeight + 'px')).observe(bar);
 
@@ -59,7 +56,7 @@ export function setupUI(app: App) {
     arrowBtn: 'Arrow: drag to draw', lineBtn: 'Line: drag to draw', circleBtn: 'Circle: drag from the center to the edge', rectBtn: 'Rectangle: drag between two corners',
     cutBtn: 'Cut the selected objects', copyBtn: 'Copy the selected objects', pasteBtn: 'Paste into the active layer and select',
     wrapBtn: 'Wrap: tap to cycle none / vertical / horizontal / both',
-    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', imagesBtn: 'Image gallery: upload pictures and add them to the drawing', gridBtn: 'Show or hide the background grid', moreBtn: 'Show or hide the second toolbar row',
+    styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', imagesBtn: 'Image gallery: upload pictures and add them to the drawing', gridBtn: 'Show or hide the background grid', polyBtn: 'Polygon / polyline: tap to place each point. Tap the last point to finish, tap the first point to close the shape',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
   let tipTimer = 0, tipShown = false;
@@ -80,6 +77,22 @@ export function setupUI(app: App) {
     // swallow the click that ends a long press
     b.addEventListener('click', e => { if (tipShown) { e.stopImmediatePropagation(); e.preventDefault(); tipShown = false; } }, true);
   });
+
+  // ---- pull the toolbar up / down to show / hide the extra rows ----
+  let pull: { id: number; x: number; y: number; done: boolean } | null = null, swallowClick = false;
+  bar.addEventListener('pointerdown', e => { pull = { id: e.pointerId, x: e.clientX, y: e.clientY, done: false }; });
+  bar.addEventListener('pointermove', e => {
+    if (!pull || e.pointerId !== pull.id || pull.done) return;
+    const dy = e.clientY - pull.y, dx = e.clientX - pull.x;
+    if (Math.abs(dy) > 22 && Math.abs(dy) > 1.5 * Math.abs(dx)) {
+      pull.done = true; swallowClick = true; clearTimeout(tipTimer); tip.classList.remove('on'); // not a long-press or a tap
+      setRow2(dy < 0);
+    }
+  });
+  // the finger may lift over the canvas once the rows have collapsed, so listen on the document
+  for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, () => { pull = null; setTimeout(() => { swallowClick = false; }, 50); }, true);
+  bar.addEventListener('click', e => { if (swallowClick) { e.stopImmediatePropagation(); e.preventDefault(); swallowClick = false; } }, true);
+  $('#grip').onclick = () => setRow2(row2.classList.contains('off')); // tapping the handle toggles too
 
   // ---- style popover ----
   const sw = $('#swatches');
@@ -261,6 +274,7 @@ export function setupUI(app: App) {
   }
   $('#addLayer').onclick = () => app.addLayer();
 
+  document.querySelectorAll<HTMLButtonElement>('#fills button').forEach(b => { b.onclick = () => app.setStyle({ fill: b.dataset.fill === '1' }, true); });
   // line style (solid, dashed, dotted, ...)
   const DASH_NAMES: Record<DashKind, string> = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', dashdot: 'Dash-dot', longdash: 'Long dash' };
   const dashes = $('#dashes');
@@ -296,6 +310,9 @@ export function setupUI(app: App) {
     const hasSel = app.toolId === 'select' && app.selection.size > 0;
     $<HTMLButtonElement>('#cutBtn').disabled = !hasSel; $<HTMLButtonElement>('#copyBtn').disabled = !hasSel;
     $<HTMLButtonElement>('#pasteBtn').disabled = !app.clipboard.length;
+    const canFill = app.fillAvailable(), fillOn = !!app.styleView().fill;
+    document.querySelectorAll<HTMLButtonElement>('#fills button').forEach(b => { b.disabled = !canFill; b.classList.toggle('on', canFill && (b.dataset.fill === '1') === fillOn); });
+    $('#fillHint').style.display = canFill ? 'none' : '';
     document.querySelectorAll<HTMLButtonElement>('#dashes button').forEach(b => b.classList.toggle('on', b.dataset.dash === (app.styleView().dash ?? 'solid')));
     renderLayers();
   };
@@ -335,7 +352,7 @@ export function setupUI(app: App) {
   }
   $('#files').onclick = openGallery;
   $('#closeGal').onclick = () => gal.classList.add('off');
-  $('#newDoc').onclick = async () => { await app.flush(); app.newDoc(); gal.classList.add('off'); };
+  $('#newDoc').onclick = async () => { app.endToolSession(); await app.flush(); app.newDoc(); gal.classList.add('off'); };
 
   return { activity };
 }

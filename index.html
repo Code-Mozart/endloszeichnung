@@ -21,6 +21,11 @@
       <input type="range" id="hue" min="0" max="360" step="1" />
     </div>
     <div class="row"><span class="lbl">Line</span> <div id="dashes"></div></div>
+    <div class="row"><span class="lbl">Fill</span> <div id="fills">
+      <button data-fill="0" title="No fill"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/></svg></button>
+      <button data-fill="1" title="Filled"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="currentColor" stroke-width="2.5"/></svg></button>
+      <span id="fillHint">closed shapes only</span>
+    </div></div>
     <label class="row"><span class="lbl">Width</span> <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
     <label class="row"><span class="lbl">Opacity</span> <input type="range" id="alpha" min="1" max="100" step="1" /> <b id="aval"></b></label>
   </div>
@@ -39,6 +44,7 @@
   </div>
 
   <nav id="bar" class="ui">
+    <div id="grip" title="Swipe up or down to show or hide more tools"></div>
     <div id="row3" class="brow off">
       <button id="cutBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg></i><span>Cut</span></button>
       <button id="copyBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></i><span>Copy</span></button>
@@ -49,7 +55,7 @@
     </div>
     <div id="row2" class="brow off">
       <button id="gridBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></i><span>Grid</span></button>
-      <button id="layersBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></svg></i><span>Layers</span></button>
+      <button id="polyBtn" data-tool="poly"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 21 10 17.5 20h-11L3 10z"/></svg></i><span>Polygon</span></button>
       <button id="arrowBtn" data-shape="arrow"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 20 4M9 4h11v11"/></svg></i><span>Arrow</span></button>
       <button id="lineBtn" data-shape="line"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 20 4"/></svg></i><span>Line</span></button>
       <button id="circleBtn" data-shape="circle"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg></i><span>Circle</span></button>
@@ -63,7 +69,7 @@
       <button data-tool="pen"><i>✏️</i><span>Pen</span></button>
       <button id="styleBtn"><i><u id="dot"></u></i><span>Style</span></button>
       <button id="eraseBtn" data-tool="erase"><i id="eraseIcon">🧽</i><span id="eraseLbl">Erase</span></button>
-      <button id="moreBtn"><i><svg id="moreArrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg></i><span id="moreLbl">More</span></button>
+      <button id="layersBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></svg></i><span>Layers</span></button>
     </div>
   </nav>
   <div id="ver" class="on"></div>
