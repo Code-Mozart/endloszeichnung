@@ -1,6 +1,6 @@
 import type { Layer, Obj } from './types';
-import { groupByLayer, paintLayers, scratchCanvas } from './scene';
-import { dashPattern, pathD, objBB, strokePath, unionBB, BB } from './geom';
+import { groupByLayer, paintLayers, paintTranslucent, scratchCanvas } from './scene';
+import { dashPattern, pathD, objBB, strokeClosed, strokePath, unionBB, BB } from './geom';
 import { getBitmap, preload } from './images';
 import { getImageBlob } from './persist';
 
@@ -24,7 +24,12 @@ export async function toSVG(strokes: Obj[], layers: Layer[]): Promise<string> {
   for (const id of new Set(imageIds(vis))) { const bl = await getImageBlob(id); if (bl) urls.set(id, await blobToDataURL(bl)); }
   const g = groupByLayer(strokes, layers);
   const one = (s: Obj) => s.type === 'stroke'
-    ? `<path d="${pathD(s.pts)}" stroke="${s.color}" stroke-width="${+s.width.toFixed(2)}"${(s.alpha ?? 1) < 0.999 ? ` stroke-opacity="${+(s.alpha ?? 1).toFixed(3)}"` : ''}${s.dash && s.dash !== 'solid' ? ` stroke-dasharray="${dashPattern(s.dash, s.width).map(v => +v.toFixed(3)).join(' ')}"` : ''}/>`
+    ? (() => {
+        const a = s.alpha ?? 1, filled = !!s.fill && strokeClosed(s);
+        // a filled shape gets one group opacity so the outline doesn't double-blend with the fill
+        const path = `<path d="${pathD(s.pts)}"${filled ? ` fill="${s.color}"` : ''} stroke="${s.color}" stroke-width="${+s.width.toFixed(2)}"${a < 0.999 && !filled ? ` stroke-opacity="${+a.toFixed(3)}"` : ''}${s.dash && s.dash !== 'solid' ? ` stroke-dasharray="${dashPattern(s.dash, s.width).map(v => +v.toFixed(3)).join(' ')}"` : ''}/>`;
+        return filled && a < 0.999 ? `<g opacity="${+a.toFixed(3)}">${path}</g>` : path;
+      })()
     : urls.has(s.img) ? `<image href="${urls.get(s.img)}" width="${s.iw}" height="${s.ih}" transform="matrix(${s.m.map(v => +v.toFixed(5)).join(' ')})"${(s.alpha ?? 1) < 0.999 ? ` opacity="${+(s.alpha ?? 1).toFixed(3)}"` : ''}/>` : '';
   const body = layers.filter(l => l.visible && g.get(l.id)?.length).map(l =>
     `<g${l.opacity < 0.999 ? ` opacity="${+l.opacity.toFixed(3)}"` : ''}>\n` + g.get(l.id)!.map(one).join('\n') + '\n</g>').join('\n');
@@ -42,7 +47,12 @@ function raster(strokes: Obj[], layers: Layer[], maxSide: number, bg: string | n
   setup(ctx);
   paintLayers(ctx, layers, groupByLayer(strokes, layers), () => scratchCanvas(c.width, c.height), setup, (x, s) => {
     if (s.type === 'stroke') {
-      x.globalAlpha = s.alpha ?? 1; x.setLineDash(dashPattern(s.dash, s.width)); x.strokeStyle = s.color; x.lineWidth = s.width; x.stroke(strokePath(s)); x.globalAlpha = 1; x.setLineDash([]);
+      const a = s.alpha ?? 1, filled = !!s.fill && strokeClosed(s), path = strokePath(s);
+      const paint = (y: CanvasRenderingContext2D) => {
+        if (filled) { y.fillStyle = s.color; y.fill(path); }
+        y.setLineDash(dashPattern(s.dash, s.width)); y.strokeStyle = s.color; y.lineWidth = s.width; y.stroke(path); y.setLineDash([]);
+      };
+      if (filled && a < 0.999) paintTranslucent(x, a, setup, paint); else { x.globalAlpha = a; paint(x); x.globalAlpha = 1; }
     } else {
       const bm = getBitmap(s.img); if (!bm) return;
       x.save(); x.transform(...s.m); x.globalAlpha = s.alpha ?? 1; x.drawImage(bm, 0, 0, s.iw, s.ih); x.restore();

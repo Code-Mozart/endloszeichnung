@@ -1,6 +1,6 @@
 import type { App } from '../app';
 import { Stroke, uid } from '../types';
-import { invalidate } from '../geom';
+import { invalidate, isClosedPts } from '../geom';
 import type { PInfo, Tool } from './tool';
 
 const HOLD_MS = 800;
@@ -53,7 +53,7 @@ export class PenTool implements Tool {
     const { app } = this, { store, pen } = app, tol = JOIN_PX / app.view.cam.zoom;
     let best: { s: Stroke; atStart: boolean } | null = null, bd = tol;
     for (const o of store.strokes.values()) {
-      if (o.type !== 'stroke' || o.id === excludeId || o.pts.length < 4 || store.layerOf(o) !== app.activeLayer || !store.isVisible(o)) continue;
+      if (o.type !== 'stroke' || o.closed || o.id === excludeId || o.pts.length < 4 || store.layerOf(o) !== app.activeLayer || !store.isVisible(o)) continue;
       if (o.color !== pen.color || o.width !== pen.width || (o.alpha ?? 1) !== pen.alpha || (o.dash ?? 'solid') !== pen.dash) continue;
       const n = o.pts.length, x0 = o.pts[0], y0 = o.pts[1], x1 = o.pts[n - 2], y1 = o.pts[n - 1];
       if (Math.hypot(x1 - x0, y1 - y0) < tol) continue; // closed outline: nothing to continue
@@ -75,7 +75,7 @@ export class PenTool implements Tool {
       store.applyLive({ removed: [join.s], added: [this.s] });
     } else {
       this.old = null; this.base = []; this.origin = [p.wx, p.wy];
-      this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, layer: activeLayer };
+      this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, layer: activeLayer };
       store.applyLive({ removed: [], added: [this.s] });
     }
     this.arm(p);
@@ -96,13 +96,15 @@ export class PenTool implements Tool {
     clearTimeout(this.timer);
     if (this.line) this.setLine(p); else this.move(p);
     const { store } = this.app;
+    s.closed = isClosedPts(s.pts); // closed loops can be filled
     if (this.old && s.pts.length <= this.base.length) { // continuing a stroke without adding anything is not an edit
       store.applyLive({ removed: [s], added: [this.old] });
     } else {
       // ending close to the end of another matching stroke merges the two into one
       const n = s.pts.length, t = this.findJoin(s.pts[n - 2], s.pts[n - 1], s.id);
       if (t) {
-        const merged: Stroke = { ...s, pts: t.atStart ? [...s.pts, ...t.s.pts] : [...s.pts, ...reversePts(t.s.pts)] };
+        const mpts = t.atStart ? [...s.pts, ...t.s.pts] : [...s.pts, ...reversePts(t.s.pts)];
+        const merged: Stroke = { ...s, pts: mpts, closed: isClosedPts(mpts) };
         store.applyLive({ removed: [s, t.s], added: [merged] });
         store.record({ removed: this.old ? [this.old, t.s] : [t.s], added: [merged] });
       } else store.record({ removed: this.old ? [this.old] : [], added: [s] });

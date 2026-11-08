@@ -38,3 +38,20 @@ export function scratchCanvas(w: number, h: number): HTMLCanvasElement {
   if (scratch.width !== w || scratch.height !== h) { scratch.width = w; scratch.height = h; }
   return scratch;
 }
+
+let objScratch: HTMLCanvasElement | null = null;
+/**
+ * Paint something that must have uniform opacity (a filled shape with an outline) by drawing it opaque on a scratch
+ * canvas first, so the outline doesn't double-blend with the fill.
+ */
+export function paintTranslucent(
+  c: CanvasRenderingContext2D, alpha: number, setup: (x: CanvasRenderingContext2D) => void, draw: (x: CanvasRenderingContext2D) => void,
+) {
+  const w = c.canvas.width, h = c.canvas.height;
+  if (!objScratch) objScratch = document.createElement('canvas');
+  if (objScratch.width !== w || objScratch.height !== h) { objScratch.width = w; objScratch.height = h; }
+  const x = objScratch.getContext('2d')!;
+  x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.clearRect(0, 0, w, h);
+  setup(x); draw(x);
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = alpha; c.drawImage(objScratch, 0, 0); c.restore();
+}

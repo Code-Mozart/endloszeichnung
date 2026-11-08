@@ -99,3 +99,13 @@ export function dashPattern(kind: DashKind | undefined, w: number): number[] {
     default: return [];
   }
 }
+
+/** A drawn path counts as a closed shape when its ends are close together compared to its length. */
+export function isClosedPts(p: number[]): boolean {
+  const n = p.length / 2;
+  if (n < 8) return false;
+  let len = 0;
+  for (let i = 1; i < n; i++) len += Math.hypot(p[2 * i] - p[2 * i - 2], p[2 * i + 1] - p[2 * i - 1]);
+  return len > 0 && Math.hypot(p[0] - p[2 * n - 2], p[1] - p[2 * n - 1]) <= 0.1 * len;
+}
+export const strokeClosed = (s: Stroke): boolean => s.closed ?? isClosedPts(s.pts);

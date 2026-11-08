@@ -6,18 +6,18 @@ import type { PInfo, Tool } from './tool';
 export type ShapeKind = 'line' | 'rect' | 'circle' | 'arrow';
 export const SHAPE_KINDS: ShapeKind[] = ['line', 'rect', 'circle', 'arrow'];
 
-const STEP_PX = 2.5; // node spacing, so the eraser can cut shapes like any stroke
+export const STEP_PX = 2.5; // node spacing, so the eraser can cut shapes like any stroke
 const ARROW_TIP = 0.2; // arrow head wing length as a fraction of the arrow length
 const ARROW_ANGLE = (28 * Math.PI) / 180;
 const MIN_DRAG_PX = 3;
 
-type Pt = [number, number];
+export type Pt = [number, number];
 /**
  * Polyline through the given corners with a node about every `step` world units.
  * Interior corners get repeated nodes: the stroke smoothing cuts corners by a fixed amount otherwise,
  * which shows as blunt corners and tips (e.g. on arrow heads) once the view is zoomed in.
  */
-function dense(corners: Pt[], step: number): number[] {
+export function dense(corners: Pt[], step: number): number[] {
   const out: number[] = [];
   for (let e = 0; e < corners.length - 1; e++) {
     const [x0, y0] = corners[e], [x1, y1] = corners[e + 1];
@@ -64,7 +64,7 @@ export class ShapeTool implements Tool {
   down(p: PInfo) {
     const { pen, activeLayer } = this.app;
     this.start = p;
-    this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, layer: activeLayer };
+    this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, closed: this.app.shapeKind === 'rect' || this.app.shapeKind === 'circle', layer: activeLayer };
     this.app.store.applyLive({ removed: [], added: [this.s] });
   }
   move(p: PInfo) {
