@@ -310,9 +310,10 @@ export function setupUI(app: App) {
       // the thumbnail is the show/hide button (hidden layers: the whole card looks deactivated)
       const tb = btn(row, '', () => app.toggleLayerVisible(l.id), false, 'lthumb');
       tb.title = l.visible ? 'Layer is visible: tap to hide it' : 'Layer is hidden: tap to show it';
-      const th = mk('canvas', '', tb); th.width = 128; th.height = 128;
+      const objs = groups.get(l.id) ?? [];
+      if (objs.length) { const th = mk('canvas', '', tb); th.width = 128; th.height = 128; thumbJobs.push({ canvas: th, objs }); }
+      else mk('span', 'empty', tb).textContent = 'empty';
       mk('span', 'vis', tb).textContent = l.visible ? '👁' : '🚫';
-      thumbJobs.push({ canvas: th, objs: groups.get(l.id) ?? [] });
       const body = mk('div', 'lbody', row);
       const nm = btn(body, l.name, () => { if (swallow) { swallow = false; return; } app.setActiveLayer(l.id); }, false, 'nm');
       // hold (or double-click) the name to rename
