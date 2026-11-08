@@ -118,6 +118,11 @@ export class App {
     this.setTool('poly');
     if (sel) { (this.tools.poly as PolyTool).beginEdit(sel); this.notify(); } // refresh the label: it says "Edit" now
   }
+  // ---- undo / redo: a tool with work in progress (polygon vertices) gets them first ----
+  get canUndo() { return !!this.activeTool().canUndo?.() || this.store.canUndo; }
+  get canRedo() { return !!this.activeTool().canRedo?.() || this.store.canRedo; }
+  undo() { if (!this.activeTool().undo?.()) this.store.undo(); }
+  redo() { if (!this.activeTool().redo?.()) this.store.redo(); }
   /** Each shape has its own button: activate the shapes tool with that shape. */
   shapeButton(kind: ShapeKind) { this.shapeKind = kind; this.setTool('shapes'); }
 

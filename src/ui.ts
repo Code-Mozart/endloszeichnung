@@ -33,8 +33,8 @@ export function setupUI(app: App) {
   $('#cutBtn').onclick = () => app.cutSelection();
   $('#copyBtn').onclick = () => app.copySelection();
   $('#pasteBtn').onclick = () => app.pasteClipboard();
-  $('#undo').onclick = () => app.store.undo();
-  $('#redo').onclick = () => app.store.redo();
+  $('#undo').onclick = () => app.undo();
+  $('#redo').onclick = () => app.redo();
   $('#north').onclick = () => app.unlockRotation();
   $('#styleBtn').onclick = () => { togglePop('#style'); };
   $('#layersBtn').onclick = () => { togglePop('#layers'); renderLayers(); };
@@ -42,12 +42,12 @@ export function setupUI(app: App) {
 
   // ---- second and third toolbar rows, toggled together (persisted per device) ----
   const row2 = $('#row2'), bar = $('#bar');
+  // the app starts with all rows expanded; collapsing the menu also closes every popup
   const setRow2 = (open: boolean) => {
     row2.classList.toggle('off', !open); $('#row3').classList.toggle('off', !open);
-    try { localStorage.setItem('bar2', open ? '1' : '0'); } catch { /* ignore */ }
+    if (!open) POPS.forEach(p => $(p).classList.add('off'));
   };
-  let open2 = false; try { open2 = localStorage.getItem('bar2') === '1'; } catch { /* ignore */ }
-  setRow2(open2);
+  setRow2(true);
   // popovers sit right above the toolbar, whatever its height
   new ResizeObserver(() => document.documentElement.style.setProperty('--barh', bar.offsetHeight + 'px')).observe(bar);
 
@@ -79,9 +79,8 @@ export function setupUI(app: App) {
     b.addEventListener('click', e => { if (tipShown) { e.stopImmediatePropagation(); e.preventDefault(); tipShown = false; } }, true);
   });
 
-  // ---- pull gestures: swipe up on the toolbar shows the extra rows; swipe down closes an open popup, otherwise hides the rows ----
+  // ---- pull gestures: swipe up on the toolbar expands it; swipe down collapses it and closes the popups; a popup pulled down closes ----
   let pull: { id: number; x: number; y: number; done: boolean; fromBar: boolean } | null = null, swallowClick = false;
-  const anyPopup = () => POPS.some(p => !$(p).classList.contains('off'));
   document.addEventListener('pointerdown', e => {
     const t = e.target as HTMLElement, fromBar = !!t.closest('#bar');
     if (!fromBar && !t.closest('.pop')) { pull = null; return; }
@@ -96,8 +95,8 @@ export function setupUI(app: App) {
     if (Math.abs(dy) > 22 && Math.abs(dy) > 1.5 * Math.abs(dx)) {
       if (!pull.fromBar && dy < 0) return; // popups only react to being pulled down
       pull.done = true; swallowClick = true; clearTimeout(tipTimer); tip.classList.remove('on'); // not a long-press or a tap
-      if (dy > 0 && anyPopup()) POPS.forEach(p => $(p).classList.add('off'));
-      else setRow2(dy < 0);
+      if (pull.fromBar) setRow2(dy < 0); // pulling the toolbar down collapses it and closes the popups; up expands it
+      else POPS.forEach(p => $(p).classList.add('off')); // a popup pulled down closes
     }
   }, true);
   // the finger may lift over the canvas once something has collapsed, so listen on the document
@@ -320,8 +319,8 @@ export function setupUI(app: App) {
     document.querySelectorAll<HTMLButtonElement>('#bar button').forEach(b => b.classList.remove('active'));
     const act = app.toolId === 'select' ? $('#selBtn') : app.toolId === 'shapes' ? document.querySelector(`[data-shape=${app.shapeKind}]`)! : document.querySelector(`[data-tool=${app.toolId}]`)!;
     act.classList.add('active');
-    $<HTMLButtonElement>('#undo').disabled = !app.store.canUndo;
-    $<HTMLButtonElement>('#redo').disabled = !app.store.canRedo;
+    $<HTMLButtonElement>('#undo').disabled = !app.canUndo;
+    $<HTMLButtonElement>('#redo').disabled = !app.canRedo;
     $('#wrapLbl').textContent = 'Wrap ' + WL[(app.wrap.x ? 1 : 0) + (app.wrap.y ? 2 : 0)];
     const del = app.toolId === 'select' && app.selection.size > 0;
     $('#eraseIcon').textContent = del ? '🗑️' : '🧽'; $('#eraseLbl').textContent = del ? 'Delete' : 'Erase';

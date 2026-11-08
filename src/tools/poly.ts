@@ -22,10 +22,29 @@ export class PolyTool implements Tool {
   private verts: Pt[] = [];
   private cur: PInfo | null = null;
   private drag: { idx: number; start: PInfo; moved: boolean } | null = null;
+  private undoStack: Pt[][] = []; // snapshots of the vertices before each change (placing, moving)
+  private redoStack: Pt[][] = [];
   private edit: { orig: Stroke; cur: Stroke; verts: Pt[]; closed: boolean } | null = null;
   constructor(private app: App) {}
 
   get editing() { return !!this.edit; }
+
+  // ---- undo / redo of the vertices while the polygon is being built ----
+  private snapshot(): Pt[] { return this.verts.map(v => [v[0], v[1]] as Pt); }
+  private checkpoint() { this.undoStack.push(this.snapshot()); this.redoStack = []; }
+  private resetHistory() { this.undoStack = []; this.redoStack = []; }
+  canUndo() { return !this.edit && this.undoStack.length > 0; }
+  canRedo() { return !this.edit && this.redoStack.length > 0; }
+  undo() {
+    if (!this.canUndo()) return false;
+    this.redoStack.push(this.snapshot()); this.verts = this.undoStack.pop()!;
+    this.app.requestRender(); this.app.notify(); return true;
+  }
+  redo() {
+    if (!this.canRedo()) return false;
+    this.undoStack.push(this.snapshot()); this.verts = this.redoStack.pop()!;
+    this.app.requestRender(); this.app.notify(); return true;
+  }
   beginEdit(s: Stroke) {
     if (!s.verts || s.verts.length < 4) return;
     this.verts = []; this.cur = null;
@@ -44,7 +63,7 @@ export class PolyTool implements Tool {
   }
   private build(v: Pt[], closed: boolean) { return dense(closed ? [...v, v[0]] : v, STEP_PX / this.app.view.cam.zoom); }
   private finish(closed: boolean) {
-    const v = this.verts; this.verts = []; this.cur = null; this.drag = null;
+    const v = this.verts; this.verts = []; this.cur = null; this.drag = null; this.resetHistory();
     if (v.length < 2) { this.app.requestRender(); return; }
     const { pen, activeLayer, store } = this.app;
     const s: Stroke = {
@@ -52,7 +71,7 @@ export class PolyTool implements Tool {
       color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, closed, layer: activeLayer,
     };
     store.apply({ removed: [], added: [s] });
-    this.app.requestRender();
+    this.app.requestRender(); this.app.notify();
   }
   /** Edit mode: replace the stroke with one that has the moved vertex (live, committed when the finger lifts). */
   private moveEditVertex(idx: number, p: PInfo) {
@@ -73,7 +92,7 @@ export class PolyTool implements Tool {
   move(p: PInfo) {
     const d = this.drag;
     if (d) {
-      if (!d.moved && Math.hypot(p.sx - d.start.sx, p.sy - d.start.sy) > DRAG_PX) d.moved = true;
+      if (!d.moved && Math.hypot(p.sx - d.start.sx, p.sy - d.start.sy) > DRAG_PX) { d.moved = true; if (!this.edit) this.checkpoint(); }
       if (d.moved) { if (this.edit) this.moveEditVertex(d.idx, p); else this.verts[d.idx] = [p.wx, p.wy]; }
     } else if (!this.edit) this.cur = p;
     this.app.requestRender();
@@ -89,14 +108,14 @@ export class PolyTool implements Tool {
     if (d) { // pressed on an existing vertex
       if (d.moved) { this.app.requestRender(); return; }
       if (d.idx === 0 && v.length >= 3) this.finish(true);
-      else if (d.idx === v.length - 1) { if (v.length >= 2) this.finish(false); else this.verts = []; }
-      this.app.requestRender(); return; // a tap on a middle vertex does nothing
+      else if (d.idx === v.length - 1) { if (v.length >= 2) this.finish(false); else { this.checkpoint(); this.verts = []; } }
+      this.app.requestRender(); this.app.notify(); return; // a tap on a middle vertex does nothing
     }
-    if (!v.length) v.push([p.wx, p.wy]);
+    if (!v.length) { this.checkpoint(); v.push([p.wx, p.wy]); }
     else if (v.length >= 3 && this.screenDist(v[0], p) < NEAR_PX) this.finish(true);
-    else if (this.screenDist(v[v.length - 1], p) < NEAR_PX) { if (v.length >= 2) this.finish(false); else this.verts = []; }
-    else v.push([p.wx, p.wy]);
-    this.app.requestRender();
+    else if (this.screenDist(v[v.length - 1], p) < NEAR_PX) { if (v.length >= 2) this.finish(false); else { this.checkpoint(); this.verts = []; } }
+    else { this.checkpoint(); v.push([p.wx, p.wy]); }
+    this.app.requestRender(); this.app.notify();
   }
   /** A second finger (view gesture) or a system cancel: keep the vertices, just forget the finger. */
   cancel() {
@@ -108,6 +127,7 @@ export class PolyTool implements Tool {
     this.drag = null; this.cur = null;
     if (this.edit) { this.edit = null; this.app.requestRender(); return; }
     if (this.verts.length >= 2) this.finish(false); else this.verts = [];
+    this.resetHistory(); this.app.notify();
   }
 
   overlay(ctx: CanvasRenderingContext2D) {
