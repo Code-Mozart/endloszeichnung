@@ -18,7 +18,9 @@ export function transformStroke(s: Stroke, m: Mat): Stroke {
     pts[i] = m[0] * x + m[2] * y + m[4];
     pts[i + 1] = m[1] * x + m[3] * y + m[5];
   }
-  return { ...s, pts }; // thickness is a style, not geometry: it stays the same when scaling
+  let verts: number[] | undefined;
+  if (s.verts) { verts = new Array<number>(s.verts.length); for (let i = 0; i < verts.length; i += 2) { const x = s.verts[i], y = s.verts[i + 1]; verts[i] = m[0] * x + m[2] * y + m[4]; verts[i + 1] = m[1] * x + m[3] * y + m[5]; } }
+  return verts ? { ...s, pts, verts } : { ...s, pts }; // thickness is a style, not geometry: it stays the same when scaling
 }
 
 /** Transform a stroke or image by an affine matrix (images just compose the matrix). */
@@ -109,3 +111,9 @@ export function isClosedPts(p: number[]): boolean {
   return len > 0 && Math.hypot(p[0] - p[2 * n - 2], p[1] - p[2 * n - 1]) <= 0.1 * len;
 }
 export const strokeClosed = (s: Stroke): boolean => s.closed ?? isClosedPts(s.pts);
+
+/** The fill of a stroke, if it has one and is a closed shape. (`true` is the older format: fill in the line color.) */
+export function strokeFill(s: Stroke): { color: string; alpha: number } | null {
+  if (!s.fill || !strokeClosed(s)) return null;
+  return s.fill === true ? { color: s.color, alpha: s.alpha ?? 1 } : { color: s.fill, alpha: s.fillAlpha ?? 1 };
+}

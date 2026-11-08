@@ -1,8 +1,8 @@
 import { View } from './view';
 import { Store } from './store';
 import { render } from './render';
-import { DEFAULT_PEN, DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Wrap, defaultLayers, uid } from './types';
-import { Mat, mul, objBB, rotateM, scaleM, strokeClosed, transformObj, translateM, unionBB } from './geom';
+import { DEFAULT_PEN, DashKind, DocData, GalleryEntry, ImageObj, Layer, Obj, PERIOD, PenStyle, Stroke, Wrap, defaultLayers, uid } from './types';
+import { Mat, mul, objBB, rotateM, scaleM, strokeClosed, strokeFill, transformObj, translateM, unionBB } from './geom';
 import type { Tool, ToolId } from './tools/tool';
 import { PenTool } from './tools/pen';
 import { EraseTool } from './tools/erase';
@@ -12,6 +12,12 @@ import { PolyTool } from './tools/poly';
 import { loadDoc, saveDoc, setLast } from './persist';
 import { thumbnail } from './exporter';
 import { preload } from './images';
+
+/** Saved layer styles from older versions had a boolean fill ("fill with the line color"). */
+function normalizePen(p: PenStyle): PenStyle {
+  const f = p.fill as unknown;
+  return { ...p, fill: typeof f === 'string' ? f : f === true ? p.color : null, fillAlpha: p.fillAlpha ?? 1 };
+}
 
 /** Central app state. Tools, renderer and UI all hang off this. */
 export class App {
@@ -98,6 +104,25 @@ export class App {
     this.store.apply({ removed, added: [] });
     this.notify();
   }
+  /** The polygon the select tool has selected (and only it), if it can be edited. */
+  selectedPolygon(): Stroke | null {
+    if (this.toolId !== 'select' || this.selection.size !== 1) return null;
+    const o = this.store.strokes.get([...this.selection][0]);
+    return o?.type === 'stroke' && o.verts && o.verts.length >= 4 ? o : null;
+  }
+  isEditingPolygon() { return this.toolId === 'poly' && (this.tools.poly as PolyTool).editing; }
+  /** Polygon button: start a new polygon, or edit the selected one (the button then says "Edit"). */
+  polyButton() {
+    const sel = this.selectedPolygon();
+    if (this.toolId === 'poly' && !sel) return; // already there
+    this.setTool('poly');
+    if (sel) { (this.tools.poly as PolyTool).beginEdit(sel); this.notify(); } // refresh the label: it says "Edit" now
+  }
+  // ---- undo / redo: a tool with work in progress (polygon vertices) gets them first ----
+  get canUndo() { return !!this.activeTool().canUndo?.() || this.store.canUndo; }
+  get canRedo() { return !!this.activeTool().canRedo?.() || this.store.canRedo; }
+  undo() { if (!this.activeTool().undo?.()) this.store.undo(); }
+  redo() { if (!this.activeTool().redo?.()) this.store.redo(); }
   /** Each shape has its own button: activate the shapes tool with that shape. */
   shapeButton(kind: ShapeKind) { this.shapeKind = kind; this.setTool('shapes'); }
 
@@ -128,8 +153,10 @@ export class App {
     if (this.toolId === 'select' && this.selection.size) {
       const s = this.store.strokes.get([...this.selection][0]);
       if (s?.type === 'stroke') {
+        // the fill shown is the one of the first closed shape in the selection
         const closed = [...this.selection].map(id => this.store.strokes.get(id)).find(o => o?.type === 'stroke' && strokeClosed(o));
-        return { color: s.color, width: s.width, alpha: s.alpha ?? 1, dash: s.dash ?? 'solid', fill: closed?.type === 'stroke' ? !!closed.fill : false };
+        const fl = closed?.type === 'stroke' ? strokeFill(closed) : null;
+        return { color: s.color, width: s.width, alpha: s.alpha ?? 1, dash: s.dash ?? 'solid', fill: fl ? fl.color : null, fillAlpha: fl ? fl.alpha : this.pen.fillAlpha };
       }
       if (s) return { ...this.pen, alpha: s.alpha ?? 1 };
     }
@@ -144,18 +171,21 @@ export class App {
   }
   /** Finish whatever the active tool has in progress (before switching drawings). */
   endToolSession() { this.activeTool().deactivate?.(); }
-  setStyle(patch: { color?: string; width?: number; alpha?: number; dash?: DashKind; fill?: boolean }, commit: boolean) {
+  setStyle(patch: { color?: string; width?: number; alpha?: number; dash?: DashKind; fill?: string | null; fillAlpha?: number }, commit: boolean) {
     if (this.toolId === 'select' && this.selection.size) {
       if (!commit) return;
       const removed = [...this.selection].map(id => this.store.strokes.get(id)!).filter(Boolean);
       // images only take opacity; strokes take everything
-      const { fill, ...rest } = patch;
+      const { fill, fillAlpha, ...rest } = patch;
       this.store.apply({
         removed,
         added: removed.map(s => {
           if (s.type !== 'stroke') return patch.alpha === undefined ? s : { ...s, alpha: patch.alpha };
           const ns = { ...s, ...rest };
-          if (fill !== undefined && strokeClosed(s)) ns.fill = fill; // fill only applies to closed shapes
+          if (strokeClosed(s)) { // the fill only applies to closed shapes
+            if (fill !== undefined) { ns.fill = fill; if (fill && ns.fillAlpha === undefined) ns.fillAlpha = this.pen.fillAlpha; }
+            if (fillAlpha !== undefined) ns.fillAlpha = fillAlpha;
+          }
           return ns;
         }),
       });
@@ -183,7 +213,7 @@ export class App {
   /** Make a layer active and switch the pen to that layer's style (a layer without one starts with the current style). */
   private activate(id: string) {
     this.activeLayer = id;
-    this.pen = { ...DEFAULT_PEN, ...(this.layerStyles[id] ?? this.pen) };
+    this.pen = normalizePen({ ...DEFAULT_PEN, ...(this.layerStyles[id] ?? this.pen) });
     this.layerStyles[id] = { ...this.pen };
   }
   setActiveLayer(id: string) {
@@ -193,7 +223,7 @@ export class App {
   /** Take over another layer's remembered style for the active layer (and the pen). */
   copyLayerStyle(fromId: string) {
     const st = this.layerStyles[fromId]; if (!st || fromId === this.activeLayer) return;
-    this.pen = { ...st }; this.layerStyles[this.activeLayer] = { ...st };
+    this.pen = normalizePen({ ...st }); this.layerStyles[this.activeLayer] = { ...this.pen };
     this.scheduleSave(); this.notify();
   }
   addLayer() {

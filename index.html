@@ -14,20 +14,18 @@
   <canvas id="c"></canvas>
 
   <div id="style" class="ui pop off">
+    <div id="target"><button data-target="line" class="on">Line</button><button data-target="fill"><u id="fillSw"></u>Fill</button><span id="fillHint">fill: closed shapes only</span></div>
     <div id="swatches"></div>
     <div id="recent" class="off"></div>
     <div id="picker" class="off">
       <div id="sv"><div id="svc"></div></div>
       <input type="range" id="hue" min="0" max="360" step="1" />
     </div>
-    <div class="row"><span class="lbl">Line</span> <div id="dashes"></div></div>
-    <div class="row"><span class="lbl">Fill</span> <div id="fills">
-      <button data-fill="0" title="No fill"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/></svg></button>
-      <button data-fill="1" title="Filled"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="currentColor" stroke-width="2.5"/></svg></button>
-      <span id="fillHint">closed shapes only</span>
-    </div></div>
-    <label class="row"><span class="lbl">Width</span> <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
+    <div id="nofillRow" class="row hide"><button id="noFill">No fill</button></div>
+    <div class="row line-only"><span class="lbl">Style</span> <div id="dashes"></div></div>
+    <label class="row line-only"><span class="lbl">Width</span> <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
     <label class="row"><span class="lbl">Opacity</span> <input type="range" id="alpha" min="1" max="100" step="1" /> <b id="aval"></b></label>
+    <div id="snapHint">Drag away from the slider for finer steps</div>
   </div>
 
   <div id="images" class="ui pop off">
@@ -46,21 +44,21 @@
   <nav id="bar" class="ui">
     <div id="grip" title="Swipe up or down to show or hide more tools"></div>
     <div id="row3" class="brow off">
+      <button id="files"><i>🗂</i><span>Files</span></button>
+      <button id="gridBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></i><span>Grid</span></button>
       <button id="cutBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg></i><span>Cut</span></button>
       <button id="copyBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></i><span>Copy</span></button>
       <button id="pasteBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg></i><span>Paste</span></button>
       <button id="north"><i id="rotIcon">🔒</i><span id="rotLbl">Rot N</span></button>
       <button id="wrapBtn"><i>🔁</i><span id="wrapLbl">Wrap</span></button>
-      <button id="files"><i>🗂</i><span>Files</span></button>
     </div>
     <div id="row2" class="brow off">
-      <button id="gridBtn"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></i><span>Grid</span></button>
-      <button id="polyBtn" data-tool="poly"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 21 10 17.5 20h-11L3 10z"/></svg></i><span>Polygon</span></button>
+      <button id="imagesBtn"><i>🖼️</i><span>Images</span></button>
       <button id="arrowBtn" data-shape="arrow"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 20 4M9 4h11v11"/></svg></i><span>Arrow</span></button>
       <button id="lineBtn" data-shape="line"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 20 4"/></svg></i><span>Line</span></button>
-      <button id="circleBtn" data-shape="circle"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg></i><span>Circle</span></button>
+      <button id="polyBtn" data-tool="poly"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 21 10 17.5 20h-11L3 10z"/></svg></i><span id="polyLbl">Polygon</span></button>
       <button id="rectBtn" data-shape="rect"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1"/></svg></i><span>Rect</span></button>
-      <button id="imagesBtn"><i>🖼️</i><span>Images</span></button>
+      <button id="circleBtn" data-shape="circle"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg></i><span>Circle</span></button>
     </div>
     <div class="brow">
       <button id="undo"><i>↶</i><span>Undo</span></button>
@@ -74,8 +72,9 @@
   </nav>
   <div id="ver" class="on"></div>
 
-  <div id="gal" class="off">
-    <header><b>Drawings</b><button id="newDoc">＋ New</button><button id="closeGal">✕</button></header>
+  <div id="gal" class="ui pop off">
+    <div id="appver"></div>
+    <header><b>Drawings</b><button id="newDoc">＋ New</button></header>
     <div id="list"></div>
   </div>
   <script type="module" src="/src/main.ts"></script>
