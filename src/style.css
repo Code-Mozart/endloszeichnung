@@ -95,9 +95,13 @@ body.ui-hidden #tip { opacity:0; }
 .lrow input[type=range] { width:60px !important; }
 #layers .lstyle:disabled { opacity:1; background:transparent !important; }
 #grip { align-self:center; width:40px; height:4px; border-radius:2px; background:#c4c4cc; margin:3px 0 1px; flex:none; }
-#fills { display:flex; gap:6px; flex:1; align-items:center; }
-#fills button { width:48px; height:36px; border:2px solid #ccc; background:#fff; border-radius:8px; color:#333; padding:4px 0; }
-#fills button.on { border-color:var(--ac); background:#e6efff; }
-#fills button:disabled { opacity:.35; }
-#fills svg { width:22px; height:22px; }
+#target { display:flex; gap:6px; align-items:center; margin-bottom:10px; }
+#target button { flex:0 0 auto; min-width:84px; height:36px; border:2px solid #ccc; background:#fff; border-radius:8px; color:#333; padding:0 12px; font:inherit; display:flex; align-items:center; justify-content:center; gap:8px; }
+#target button.on { border-color:var(--ac); background:#e6efff; }
+#target button:disabled { opacity:.35; }
+#fillSw { width:16px; height:16px; border-radius:50%; border:2px solid #777; display:inline-block; background:repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0/8px 8px; position:relative; overflow:hidden; }
+#fillSw::after { content:''; position:absolute; inset:0; background:var(--fc, transparent); }
 #fillHint { font-size:11px; color:#777; margin-left:4px; }
+#noFill { height:36px; padding:0 14px; border:2px solid #ccc; background:#fff; border-radius:8px; font:inherit; color:#333; }
+#noFill.on { border-color:var(--ac); background:#e6efff; }
+.hide { display:none !important; }

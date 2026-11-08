@@ -95,8 +95,11 @@ export function setupUI(app: App) {
   $('#grip').onclick = () => setRow2(row2.classList.contains('off')); // tapping the handle toggles too
 
   // ---- style popover ----
+  // the color swatches, picker and opacity slider edit either the line or the fill
+  let target: 'line' | 'fill' = 'line';
+  const colorPatch = (c: string) => (target === 'fill' ? { fill: c } : { color: c });
   const sw = $('#swatches');
-  SWATCHES.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle({ color: c }, true); sw.appendChild(b); });
+  SWATCHES.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle(colorPatch(c), true); sw.appendChild(b); });
   // recently used custom colors (persisted per device)
   const RECENT_N = 8, RKEY = 'recentColors';
   let recent: string[] = [];
@@ -104,7 +107,7 @@ export function setupUI(app: App) {
   const rec = $('#recent');
   const paintRecent = () => {
     rec.innerHTML = ''; rec.classList.toggle('off', !recent.length);
-    recent.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle({ color: c }, true); rec.appendChild(b); });
+    recent.forEach(c => { const b = document.createElement('b'); b.style.background = c; b.onclick = () => app.setStyle(colorPatch(c), true); rec.appendChild(b); });
   };
   const remember = (c: string) => {
     c = c.toLowerCase();
@@ -136,7 +139,7 @@ export function setupUI(app: App) {
     svc.style.left = hsv.s * 100 + '%'; svc.style.top = (1 - hsv.v) * 100 + '%';
     hue.value = String(Math.round(hsv.h));
   };
-  const pick = (commit: boolean) => { paintPicker(); app.setStyle({ color: hex() }, commit); if (commit) rememberSoon(hex()); };
+  const pick = (commit: boolean) => { paintPicker(); app.setStyle(colorPatch(hex()), commit); if (commit) rememberSoon(hex()); };
   const svMove = (e: PointerEvent) => {
     const r = sv.getBoundingClientRect();
     hsv.s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); hsv.v = 1 - Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
@@ -151,8 +154,9 @@ export function setupUI(app: App) {
   width.oninput = () => { app.setStyle({ width: +width.value }, false); $('#wval').textContent = (+width.value).toFixed(1); };
   width.onchange = () => app.setStyle({ width: +width.value }, true);
   const alpha = $<HTMLInputElement>('#alpha');
-  alpha.oninput = () => { app.setStyle({ alpha: +alpha.value / 100 }, false); $('#aval').textContent = alpha.value + '%'; };
-  alpha.onchange = () => app.setStyle({ alpha: +alpha.value / 100 }, true);
+  const alphaPatch = () => (target === 'fill' ? { fillAlpha: +alpha.value / 100 } : { alpha: +alpha.value / 100 });
+  alpha.oninput = () => { app.setStyle(alphaPatch(), false); $('#aval').textContent = alpha.value + '%'; };
+  alpha.onchange = () => app.setStyle(alphaPatch(), true);
   const rgba = (c: string, a: number) => `rgba(${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)},${a})`;
 
   // ---- layers popup ----
@@ -263,8 +267,9 @@ export function setupUI(app: App) {
       // this layer's remembered pen style; tapping it copies the style to the active layer (and the pen)
       const st = app.layerStyles[l.id] ?? app.pen;
       const sw = btn('', () => app.copyLayerStyle(l.id), l.id === app.activeLayer, 'lstyle');
-      sw.innerHTML = `<u style="background:${rgba(st.color, st.alpha)}"></u>`;
-      sw.title = `Layer style: ${Math.round(st.alpha * 100)}% opacity, width ${st.width.toFixed(1)}, ${DASH_NAMES[st.dash]}. Tap to use it on the active layer`;
+      // line color as the ring, fill color (if any) inside
+      sw.innerHTML = st.fill ? `<u style="background:${rgba(st.fill, st.fillAlpha ?? 1)};border-color:${rgba(st.color, st.alpha)}"></u>` : `<u style="background:${rgba(st.color, st.alpha)}"></u>`;
+      sw.title = `Layer style: line ${Math.round(st.alpha * 100)}% opacity, width ${st.width.toFixed(1)}, ${DASH_NAMES[st.dash]}${st.fill ? `, fill ${Math.round((st.fillAlpha ?? 1) * 100)}%` : ', no fill'}. Tap to use it on the active layer`;
       btn('🗑', () => app.removeLayer(l.id), ls.length <= 1);
       const grip = btn('☰', () => {}, ls.length <= 1, 'grip');
       row.dataset.id = l.id;
@@ -274,7 +279,8 @@ export function setupUI(app: App) {
   }
   $('#addLayer').onclick = () => app.addLayer();
 
-  document.querySelectorAll<HTMLButtonElement>('#fills button').forEach(b => { b.onclick = () => app.setStyle({ fill: b.dataset.fill === '1' }, true); });
+  document.querySelectorAll<HTMLButtonElement>('#target button').forEach(b => { b.onclick = () => { target = b.dataset.target as 'line' | 'fill'; refresh(); }; });
+  $('#noFill').onclick = () => app.setStyle({ fill: null }, true);
   // line style (solid, dashed, dotted, ...)
   const DASH_NAMES: Record<DashKind, string> = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', dashdot: 'Dash-dot', longdash: 'Long dash' };
   const dashes = $('#dashes');
@@ -296,10 +302,22 @@ export function setupUI(app: App) {
     $('#eraseIcon').textContent = del ? '🗑️' : '🧽'; $('#eraseLbl').textContent = del ? 'Delete' : 'Erase';
     const st = app.styleView();
     $('#dot').style.background = rgba(st.color, st.alpha);
-    $('#alpha').style.setProperty('--c', st.color);
-    if (document.activeElement !== alpha) alpha.value = String(Math.round(st.alpha * 100));
-    $('#aval').textContent = Math.round(st.alpha * 100) + '%';
-    if (!dragging && st.color.toLowerCase() !== hex()) { fromHex(st.color); paintPicker(); }
+    const canFill = app.fillAvailable();
+    if (!canFill && target === 'fill') target = 'line';
+    const editing = target === 'fill' ? { color: st.fill ?? st.color, alpha: st.fillAlpha ?? 1 } : { color: st.color, alpha: st.alpha };
+    $('#fillSw').style.setProperty('--fc', st.fill ? rgba(st.fill, st.fillAlpha ?? 1) : 'transparent');
+    document.querySelectorAll<HTMLButtonElement>('#target button').forEach(b => {
+      b.classList.toggle('on', b.dataset.target === target);
+      if (b.dataset.target === 'fill') b.disabled = !canFill;
+    });
+    $('#fillHint').style.display = canFill ? 'none' : '';
+    document.querySelectorAll('.line-only').forEach(e => e.classList.toggle('hide', target === 'fill'));
+    $('#nofillRow').classList.toggle('hide', target !== 'fill');
+    $('#noFill').classList.toggle('on', !st.fill);
+    $('#alpha').style.setProperty('--c', editing.color);
+    if (document.activeElement !== alpha) alpha.value = String(Math.round(editing.alpha * 100));
+    $('#aval').textContent = Math.round(editing.alpha * 100) + '%';
+    if (!dragging && editing.color.toLowerCase() !== hex()) { fromHex(editing.color); paintPicker(); }
     if (document.activeElement !== width) { width.value = String(st.width); }
     $('#wval').textContent = st.width.toFixed(1);
     $('#north').classList.toggle('unlocked', !app.rotLocked);
@@ -310,9 +328,6 @@ export function setupUI(app: App) {
     const hasSel = app.toolId === 'select' && app.selection.size > 0;
     $<HTMLButtonElement>('#cutBtn').disabled = !hasSel; $<HTMLButtonElement>('#copyBtn').disabled = !hasSel;
     $<HTMLButtonElement>('#pasteBtn').disabled = !app.clipboard.length;
-    const canFill = app.fillAvailable(), fillOn = !!app.styleView().fill;
-    document.querySelectorAll<HTMLButtonElement>('#fills button').forEach(b => { b.disabled = !canFill; b.classList.toggle('on', canFill && (b.dataset.fill === '1') === fillOn); });
-    $('#fillHint').style.display = canFill ? 'none' : '';
     document.querySelectorAll<HTMLButtonElement>('#dashes button').forEach(b => b.classList.toggle('on', b.dataset.dash === (app.styleView().dash ?? 'solid')));
     renderLayers();
   };

@@ -109,3 +109,9 @@ export function isClosedPts(p: number[]): boolean {
   return len > 0 && Math.hypot(p[0] - p[2 * n - 2], p[1] - p[2 * n - 1]) <= 0.1 * len;
 }
 export const strokeClosed = (s: Stroke): boolean => s.closed ?? isClosedPts(s.pts);
+
+/** The fill of a stroke, if it has one and is a closed shape. (`true` is the older format: fill in the line color.) */
+export function strokeFill(s: Stroke): { color: string; alpha: number } | null {
+  if (!s.fill || !strokeClosed(s)) return null;
+  return s.fill === true ? { color: s.color, alpha: s.alpha ?? 1 } : { color: s.fill, alpha: s.fillAlpha ?? 1 };
+}

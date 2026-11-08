@@ -64,7 +64,7 @@ export class ShapeTool implements Tool {
   down(p: PInfo) {
     const { pen, activeLayer } = this.app;
     this.start = p;
-    this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, closed: this.app.shapeKind === 'rect' || this.app.shapeKind === 'circle', layer: activeLayer };
+    this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, closed: this.app.shapeKind === 'rect' || this.app.shapeKind === 'circle', layer: activeLayer };
     this.app.store.applyLive({ removed: [], added: [this.s] });
   }
   move(p: PInfo) {

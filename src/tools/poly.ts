@@ -27,7 +27,7 @@ export class PolyTool implements Tool {
     const { pen, activeLayer, view, store } = this.app;
     const s: Stroke = {
       id: uid(), type: 'stroke', pts: dense(closed ? [...v, v[0]] : v, STEP_PX / view.cam.zoom),
-      color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, closed, layer: activeLayer,
+      color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, closed, layer: activeLayer,
     };
     store.apply({ removed: [], added: [s] });
     this.app.requestRender();
@@ -56,7 +56,7 @@ export class PolyTool implements Tool {
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); if (closing) ctx.closePath();
-    if (pen.fill && v.length >= 2) { ctx.globalAlpha = pen.alpha * 0.5; ctx.fillStyle = pen.color; ctx.fill(); }
+    if (pen.fill && v.length >= 3) { ctx.globalAlpha = pen.fillAlpha; ctx.fillStyle = pen.fill; ctx.fill(); }
     ctx.globalAlpha = pen.alpha; ctx.setLineDash(dashPattern(pen.dash, pen.width)); ctx.strokeStyle = pen.color; ctx.lineWidth = pen.width; ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha = 1;
     // vertices; the first one grows into a ring when a tap would close the polygon

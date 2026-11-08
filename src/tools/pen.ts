@@ -75,7 +75,7 @@ export class PenTool implements Tool {
       store.applyLive({ removed: [join.s], added: [this.s] });
     } else {
       this.old = null; this.base = []; this.origin = [p.wx, p.wy];
-      this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, layer: activeLayer };
+      this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, layer: activeLayer };
       store.applyLive({ removed: [], added: [this.s] });
     }
     this.arm(p);

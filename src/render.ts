@@ -1,8 +1,8 @@
 import type { App } from './app';
 import { PERIOD as P, Obj } from './types';
-import { dashPattern, imageCorners, objBB, strokeClosed, strokePath } from './geom';
+import { dashPattern, imageCorners, objBB, strokeFill, strokePath } from './geom';
 import { getBitmap } from './images';
-import { groupByLayer, paintLayers, paintTranslucent, scratchCanvas } from './scene';
+import { groupByLayer, paintLayers, scratchCanvas } from './scene';
 
 function rng(min: number, max: number, vmin: number, vmax: number, wrap: boolean): [number, number] {
   if (!wrap) return max < vmin || min > vmax ? [1, 0] : [0, 0];
@@ -44,13 +44,9 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
       c.save(); c.translate(i * P, j * P);
       if (s.type === 'stroke') {
         if (sel) { c.globalAlpha = 1; c.setLineDash([]); c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path!); }
-        const a = s.alpha ?? 1, filled = !!s.fill && strokeClosed(s);
-        const paint = (x: CanvasRenderingContext2D) => {
-          if (filled) { x.fillStyle = s.color; x.fill(path!); }
-          x.setLineDash(dashPattern(s.dash, s.width)); x.strokeStyle = s.color; x.lineWidth = s.width; x.stroke(path!);
-        };
-        if (filled && a < 0.999) paintTranslucent(c, a, x => { setup(x); x.translate(i * P, j * P); }, paint);
-        else { c.globalAlpha = a; paint(c); }
+        const fl = strokeFill(s);
+        if (fl) { c.globalAlpha = fl.alpha; c.fillStyle = fl.color; c.fill(path!); } // fill under the outline, with its own color and opacity
+        c.globalAlpha = s.alpha ?? 1; c.setLineDash(dashPattern(s.dash, s.width)); c.strokeStyle = s.color; c.lineWidth = s.width; c.stroke(path!);
       } else {
         if (bmp) { c.save(); c.transform(...s.m); c.globalAlpha = s.alpha ?? 1; c.imageSmoothingQuality = 'high'; c.drawImage(bmp, 0, 0, s.iw, s.ih); c.restore(); }
         if (sel || !bmp) {

@@ -14,19 +14,16 @@
   <canvas id="c"></canvas>
 
   <div id="style" class="ui pop off">
+    <div id="target"><button data-target="line" class="on">Line</button><button data-target="fill"><u id="fillSw"></u>Fill</button><span id="fillHint">fill: closed shapes only</span></div>
     <div id="swatches"></div>
     <div id="recent" class="off"></div>
     <div id="picker" class="off">
       <div id="sv"><div id="svc"></div></div>
       <input type="range" id="hue" min="0" max="360" step="1" />
     </div>
-    <div class="row"><span class="lbl">Line</span> <div id="dashes"></div></div>
-    <div class="row"><span class="lbl">Fill</span> <div id="fills">
-      <button data-fill="0" title="No fill"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/></svg></button>
-      <button data-fill="1" title="Filled"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="currentColor" stroke-width="2.5"/></svg></button>
-      <span id="fillHint">closed shapes only</span>
-    </div></div>
-    <label class="row"><span class="lbl">Width</span> <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
+    <div id="nofillRow" class="row hide"><button id="noFill">No fill</button></div>
+    <div class="row line-only"><span class="lbl">Style</span> <div id="dashes"></div></div>
+    <label class="row line-only"><span class="lbl">Width</span> <input type="range" id="width" min="0.5" max="40" step="0.5" /> <b id="wval"></b></label>
     <label class="row"><span class="lbl">Opacity</span> <input type="range" id="alpha" min="1" max="100" step="1" /> <b id="aval"></b></label>
   </div>
 
