@@ -292,7 +292,7 @@ export class App {
     this.view.cam = d.camera; this.wrap = d.wrap; this.grid = d.grid ?? true;
     this.doc = { id: d.id, name: d.name, createdAt: d.createdAt, updatedAt: d.updatedAt, thumb };
     this.selection.clear(); this.preview = new Map(); this.contentDirty = false;
-    setLast(d.id); this.requestRender(); this.notify();
+    setLast(d.id); this.setTool('select'); // existing drawings open ready to select
   }
   newDoc() {
     const now = Date.now();
@@ -300,6 +300,7 @@ export class App {
       v: 1, id: uid(), name: 'Drawing ' + new Date(now).toLocaleDateString(), createdAt: now, updatedAt: now,
       strokes: [], history: [], hIdx: 0, camera: { cx: PERIOD / 2, cy: PERIOD / 2, zoom: (this.view.h * 0.92) / PERIOD, rot: 0 }, wrap: { x: false, y: false },
     });
+    this.setTool('pen'); // a fresh canvas starts with the pen
     this.contentDirty = true; this.scheduleSave();
   }
   async openDoc(id: string) {
@@ -313,7 +314,7 @@ export class App {
     clearTimeout(this.saveTimer);
     if (!this.doc.id) return;
     const strokes = [...this.store.strokes.values()];
-    if (this.contentDirty) { this.doc.updatedAt = Date.now(); this.doc.thumb = thumbnail(strokes, this.store.layers); this.contentDirty = false; }
+    if (this.contentDirty || !this.doc.thumb) { if (this.contentDirty) this.doc.updatedAt = Date.now(); this.doc.thumb = thumbnail(strokes, this.store.layers); this.contentDirty = false; }
     const { id, name, createdAt, updatedAt, thumb } = this.doc;
     await saveDoc(
       { v: 1, id, name, createdAt, updatedAt, strokes, history: this.store.history, hIdx: this.store.hIdx, camera: { ...this.view.cam }, wrap: { ...this.wrap }, layers: this.store.layers, activeLayer: this.activeLayer, grid: this.grid, layerStyles: Object.fromEntries(Object.entries(this.layerStyles).filter(([id]) => this.store.layers.some(l => l.id === id))) },
