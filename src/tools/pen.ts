@@ -1,12 +1,13 @@
 import type { App } from '../app';
 import { Stroke, uid } from '../types';
-import { invalidate, isClosedPts } from '../geom';
+import { CLOSE_RATIO, MIN_LOOP_TURNING, invalidate, isClosedPts, turning } from '../geom';
 import type { PInfo, Tool } from './tool';
 
 const HOLD_MS = 800;
 const HOLD_TOLERANCE_PX = 5;
 const LINE_STEP_PX = 2.5; // node spacing of snapped straight lines (screen px at snap time)
-const JOIN_PX = 12; // starting this close to the end of a matching stroke continues it
+const JOIN_PX = 36; // starting / ending this close to the end of a matching stroke continues / merges it
+const CLOSE_PX = 40; // ending this close to the start of the same stroke closes it into a loop (or within 15% of its length)
 
 const reversePts = (p: number[]) => { const o: number[] = []; for (let i = p.length - 2; i >= 0; i -= 2) o.push(p[i], p[i + 1]); return o; };
 
@@ -46,6 +47,18 @@ export class PenTool implements Tool {
     const pts = [...this.base];
     for (let i = this.base.length ? 1 : 0; i <= n; i++) pts.push(x0 + ((p.wx - x0) * i) / n, y0 + ((p.wy - y0) * i) / n);
     s.pts = pts; invalidate(s); this.app.requestRender();
+  }
+
+  /** If the stroke loops back to its own start, finish the loop exactly (append the start point). */
+  private closeOnSelf(s: Stroke): boolean {
+    const p = s.pts, n = p.length / 2;
+    if (n < 8) return false;
+    let len = 0;
+    for (let i = 1; i < n; i++) len += Math.hypot(p[2 * i] - p[2 * i - 2], p[2 * i + 1] - p[2 * i - 1]);
+    const gap = Math.hypot(p[0] - p[2 * n - 2], p[1] - p[2 * n - 1]);
+    if (len < 3 * gap || gap > Math.max(CLOSE_PX / this.app.view.cam.zoom, CLOSE_RATIO * len) || turning(p) < MIN_LOOP_TURNING) return false; // must really go around (not a U)
+    if (gap > 0) { p.push(p[0], p[1]); invalidate(s); }
+    return true;
   }
 
   /** An open stroke on the active layer with the same style whose start or end is within reach of (x, y). */
@@ -95,13 +108,14 @@ export class PenTool implements Tool {
     const s = this.s; if (!s) return;
     clearTimeout(this.timer);
     if (this.line) this.setLine(p); else this.move(p);
-    const { store } = this.app;
-    s.closed = isClosedPts(s.pts); // closed loops can be filled
-    if (this.old && s.pts.length <= this.base.length) { // continuing a stroke without adding anything is not an edit
-      store.applyLive({ removed: [s], added: [this.old] });
+    const { store } = this.app, noGrowth = !!this.old && s.pts.length <= this.base.length;
+    // a stroke that ends near its own start (a blob closing in on itself) is closed, so it can be filled
+    if (!this.line && this.closeOnSelf(s)) s.closed = true; else s.closed = isClosedPts(s.pts);
+    if (noGrowth) { // continuing a stroke without adding anything is not an edit
+      store.applyLive({ removed: [s], added: [this.old!] });
     } else {
       // ending close to the end of another matching stroke merges the two into one
-      const n = s.pts.length, t = this.findJoin(s.pts[n - 2], s.pts[n - 1], s.id);
+      const n = s.pts.length, t = s.closed ? null : this.findJoin(s.pts[n - 2], s.pts[n - 1], s.id);
       if (t) {
         const mpts = t.atStart ? [...s.pts, ...t.s.pts] : [...s.pts, ...reversePts(t.s.pts)];
         const merged: Stroke = { ...s, pts: mpts, closed: isClosedPts(mpts), verts: undefined };
@@ -109,6 +123,7 @@ export class PenTool implements Tool {
         store.record({ removed: this.old ? [this.old, t.s] : [t.s], added: [merged] });
       } else store.record({ removed: this.old ? [this.old] : [], added: [s] });
     }
+    if (!noGrowth) this.app.colorUsed(s.color, s.closed ? s.fill : null);
     this.s = null; this.old = null; this.line = false;
   }
   cancel() {

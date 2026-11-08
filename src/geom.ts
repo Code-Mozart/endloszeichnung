@@ -102,13 +102,30 @@ export function dashPattern(kind: DashKind | undefined, w: number): number[] {
   }
 }
 
-/** A drawn path counts as a closed shape when its ends are close together compared to its length. */
+/** A drawn path counts as a closed shape when its ends are close together compared to its length (15%) and it really goes around. */
+export const CLOSE_RATIO = 0.15;
+/** Total turning of a path in radians (a loop is about 2π, a U or a hairpin about π). Scale independent: segments are len/32 long. */
+export function turning(p: number[]): number {
+  const n = p.length / 2; let len = 0;
+  for (let i = 1; i < n; i++) len += Math.hypot(p[2 * i] - p[2 * i - 2], p[2 * i + 1] - p[2 * i - 1]);
+  if (!len) return 0;
+  const minSeg = len / 32, pts: [number, number][] = [[p[0], p[1]]];
+  let lx = p[0], ly = p[1];
+  for (let i = 1; i < n; i++) { const x = p[2 * i], y = p[2 * i + 1]; if (Math.hypot(x - lx, y - ly) >= minSeg) { pts.push([x, y]); lx = x; ly = y; } }
+  let tot = 0;
+  for (let i = 2; i < pts.length; i++) {
+    const ax = pts[i - 1][0] - pts[i - 2][0], ay = pts[i - 1][1] - pts[i - 2][1], bx = pts[i][0] - pts[i - 1][0], by = pts[i][1] - pts[i - 1][1];
+    tot += Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+  }
+  return Math.abs(tot);
+}
+export const MIN_LOOP_TURNING = 4.2; // about 240 degrees
 export function isClosedPts(p: number[]): boolean {
   const n = p.length / 2;
   if (n < 8) return false;
   let len = 0;
   for (let i = 1; i < n; i++) len += Math.hypot(p[2 * i] - p[2 * i - 2], p[2 * i + 1] - p[2 * i - 1]);
-  return len > 0 && Math.hypot(p[0] - p[2 * n - 2], p[1] - p[2 * n - 1]) <= 0.1 * len;
+  return len > 0 && Math.hypot(p[0] - p[2 * n - 2], p[1] - p[2 * n - 1]) <= CLOSE_RATIO * len && turning(p) >= MIN_LOOP_TURNING;
 }
 export const strokeClosed = (s: Stroke): boolean => s.closed ?? isClosedPts(s.pts);
 

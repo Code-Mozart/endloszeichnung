@@ -62,6 +62,29 @@ export async function toBlob(strokes: Obj[], layers: Layer[], type: 'image/png' 
   return new Promise<Blob>(res => raster(strokes, layers, 3000, type === 'image/jpeg' ? '#fff' : null).toBlob(b => res(b!), type, 0.92));
 }
 
+/**
+ * Draw the objects of one layer into a small canvas, ignoring the layer's opacity and visibility. `box` is the world area to show
+ * (the same for all layers, so the thumbnails line up); thin strokes are kept at least ~1.6px wide so they stay visible.
+ */
+export function drawLayerThumb(canvas: HTMLCanvasElement, objs: Obj[], box: BB) {
+  const ctx = canvas.getContext('2d')!, W = canvas.width, H = canvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const w = Math.max(1, box.maxX - box.minX), h = Math.max(1, box.maxY - box.minY), k = Math.min(W / w, H / h);
+  ctx.setTransform(k, 0, 0, k, (W - w * k) / 2 - box.minX * k, (H - h * k) / 2 - box.minY * k);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const s of objs) {
+    if (s.type === 'stroke') {
+      const fl = strokeFill(s), path = strokePath(s);
+      if (fl) { ctx.globalAlpha = fl.alpha; ctx.fillStyle = fl.color; ctx.fill(path); }
+      ctx.globalAlpha = s.alpha ?? 1; ctx.strokeStyle = s.color; ctx.lineWidth = Math.max(s.width, 1.6 / k); ctx.stroke(path);
+    } else {
+      const bm = getBitmap(s.img);
+      if (bm) { ctx.save(); ctx.globalAlpha = s.alpha ?? 1; ctx.transform(...s.m); ctx.drawImage(bm, 0, 0, s.iw, s.ih); ctx.restore(); }
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 export function download(blob: Blob, name: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
