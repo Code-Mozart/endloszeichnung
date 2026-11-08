@@ -2,8 +2,10 @@ import type { App } from './app';
 import type { ToolId } from './tools/tool';
 import { deleteDoc, deleteImageBlob, imageStillUsed, listGallery, listMetas, loadDoc, putImage, removeGalleryEntry } from './persist';
 import { decodeFile, forget } from './images';
-import { download, toBlob, toSVG } from './exporter';
-import { DASH_KINDS, DashKind, Layer, defaultLayers } from './types';
+import { bounds, download, drawLayerThumb, toBlob, toSVG } from './exporter';
+import { groupByLayer } from './scene';
+import { DASH_KINDS, DashKind, Layer, Obj, defaultLayers } from './types';
+import type { BB } from './geom';
 import { dashPattern } from './geom';
 import type { ShapeKind } from './tools/shapes';
 
@@ -60,9 +62,16 @@ export function setupUI(app: App) {
     styleBtn: 'Color and thickness', undo: 'Undo', redo: 'Redo', north: 'Turn view to the next compass direction (N, E, S, W) and unlock rotating for 1s; rotation is locked otherwise', files: 'Drawings: switch, export', layersBtn: 'Layers: order, add, remove, rename, opacity', imagesBtn: 'Image gallery: upload pictures and add them to the drawing', gridBtn: 'Show or hide the background grid', polyBtn: 'Polygon / polyline: tap to place each point. Tap the last point to finish, tap the first point to close the shape',
   };
   const tip = document.createElement('div'); tip.id = 'tip'; document.body.appendChild(tip);
-  let tipTimer = 0, tipShown = false;
+  let tipTimer = 0, tipHide = 0, tipShown = false;
+  const hideTip = () => { clearTimeout(tipTimer); clearTimeout(tipHide); tip.classList.remove('on'); };
+  // any new press hides the old tooltip; after the finger lifts it stays long enough to read (longer text, longer time)
+  document.addEventListener('pointerdown', hideTip, true);
+  document.addEventListener('pointerup', () => {
+    clearTimeout(tipTimer);
+    if (tip.classList.contains('on')) { clearTimeout(tipHide); tipHide = window.setTimeout(hideTip, Math.min(9000, Math.max(4000, 2800 + (tip.textContent ?? '').length * 60))); }
+  }, true);
+  document.addEventListener('pointercancel', () => clearTimeout(tipTimer), true);
   document.querySelectorAll<HTMLButtonElement>('#bar button').forEach(b => {
-    const hide = () => { clearTimeout(tipTimer); tip.classList.remove('on'); };
     b.addEventListener('pointerdown', () => {
       tipShown = false; clearTimeout(tipTimer);
       tipTimer = window.setTimeout(() => {
@@ -73,7 +82,7 @@ export function setupUI(app: App) {
         tip.style.bottom = window.innerHeight - r.top + 8 + 'px';
       }, 450);
     });
-    for (const t of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(t, () => setTimeout(hide, t === 'pointerup' ? 900 : 0));
+    b.addEventListener('pointerleave', () => clearTimeout(tipTimer)); // finger slid off before the tooltip appeared
     b.addEventListener('contextmenu', e => e.preventDefault());
     // swallow the click that ends a long press
     b.addEventListener('click', e => { if (tipShown) { e.stopImmediatePropagation(); e.preventDefault(); tipShown = false; } }, true);
@@ -94,7 +103,7 @@ export function setupUI(app: App) {
     const dy = e.clientY - pull.y, dx = e.clientX - pull.x;
     if (Math.abs(dy) > 22 && Math.abs(dy) > 1.5 * Math.abs(dx)) {
       if (!pull.fromBar && dy < 0) return; // popups only react to being pulled down
-      pull.done = true; swallowClick = true; clearTimeout(tipTimer); tip.classList.remove('on'); // not a long-press or a tap
+      pull.done = true; swallowClick = true; hideTip(); // not a long-press or a tap
       if (pull.fromBar) setRow2(dy < 0); // pulling the toolbar down collapses it and closes the popups; up expands it
       else POPS.forEach(p => $(p).classList.add('off')); // a popup pulled down closes
     }
@@ -255,19 +264,30 @@ export function setupUI(app: App) {
     grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
   }
 
+  // Layer thumbnails: all layers show the same area (the bounds of everything drawn), so they line up.
+  let thumbJobs: { canvas: HTMLCanvasElement; objs: Obj[] }[] = [], thumbBox: BB | null = null, thumbTimer = 0;
+  const drawThumbs = () => { if (thumbBox) for (const j of thumbJobs) if (j.canvas.isConnected) drawLayerThumb(j.canvas, j.objs, thumbBox); };
+
   function renderLayers() {
     if ($('#layers').classList.contains('off')) return;
     if (sliding) return; // don't rebuild under a dragged slider
     llist.innerHTML = '';
-    const ls = app.store.layers;
+    const ls = app.store.layers, groups = groupByLayer(app.store.strokes.values(), ls);
+    thumbBox = bounds([...app.store.strokes.values()], 12); thumbJobs = [];
     [...ls].reverse().forEach((l: Layer) => {
-      const i = ls.indexOf(l), row = document.createElement('div');
+      const row = document.createElement('div');
       row.className = 'lrow' + (l.id === app.activeLayer ? ' cur' : '') + (l.visible ? '' : ' hid');
-      const btn = (txt: string, fn: () => void, dis = false, cls = '') => {
-        const b = document.createElement('button'); b.textContent = txt; b.className = cls; b.disabled = dis; b.onclick = fn; row.appendChild(b); return b;
+      row.dataset.id = l.id;
+      const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement) => { const e = document.createElement(tag); e.className = cls; parent.appendChild(e); return e; };
+      const btn = (parent: HTMLElement, txt: string, fn: () => void, dis = false, cls = '') => {
+        const b = mk('button', cls, parent); b.textContent = txt; b.disabled = dis; b.onclick = fn; return b;
       };
-      btn(l.visible ? '👁' : '🚫', () => app.toggleLayerVisible(l.id));
-      const nm = btn(l.name, () => { if (swallow) { swallow = false; return; } app.setActiveLayer(l.id); }, false, 'nm');
+      // thumbnail (tap: make this layer active)
+      const th = mk('canvas', 'lthumb', row); th.width = 128; th.height = 128;
+      th.onclick = () => app.setActiveLayer(l.id);
+      thumbJobs.push({ canvas: th, objs: groups.get(l.id) ?? [] });
+      const body = mk('div', 'lbody', row);
+      const nm = btn(body, l.name, () => { if (swallow) { swallow = false; return; } app.setActiveLayer(l.id); }, false, 'nm');
       // hold (or double-click) the name to rename
       const rename = () => {
         const v = prompt('Layer name', l.name);
@@ -282,24 +302,25 @@ export function setupUI(app: App) {
       for (const t of ['pointerup', 'pointercancel', 'pointerleave']) nm.addEventListener(t, () => clearTimeout(hold));
       nm.addEventListener('dblclick', rename);
       nm.addEventListener('contextmenu', e => e.preventDefault());
-      const r = document.createElement('input'); r.type = 'range'; r.min = '0'; r.max = '100'; r.value = String(Math.round(l.opacity * 100)); r.title = 'Layer opacity';
+      const ctl = mk('div', 'lctl', body);
+      btn(ctl, l.visible ? '👁' : '🚫', () => app.toggleLayerVisible(l.id), false, 'leye');
+      const r = mk('input', '', ctl); r.type = 'range'; r.min = '0'; r.max = '100'; r.value = String(Math.round(l.opacity * 100)); r.title = 'Layer opacity';
       r.oninput = () => app.layerOpacityLive(l.id, +r.value / 100);
       r.onpointerdown = () => { sliding = true; };
       r.onchange = () => { sliding = false; app.commitLayerOpacity(); };
       r.onpointerup = () => { sliding = false; };
-      row.appendChild(r);
       // this layer's remembered pen style; tapping it copies the style to the active layer (and the pen)
       const st = app.layerStyles[l.id] ?? app.pen;
-      const sw = btn('', () => app.copyLayerStyle(l.id), l.id === app.activeLayer, 'lstyle');
+      const sw = btn(ctl, '', () => app.copyLayerStyle(l.id), l.id === app.activeLayer, 'lstyle');
       // line color as the ring, fill color (if any) inside
       sw.innerHTML = st.fill ? `<u style="background:${rgba(st.fill, st.fillAlpha ?? 1)};border-color:${rgba(st.color, st.alpha)}"></u>` : `<u style="background:${rgba(st.color, st.alpha)}"></u>`;
       sw.title = `Layer style: line ${Math.round(st.alpha * 100)}% opacity, width ${st.width.toFixed(1)}, ${DASH_NAMES[st.dash]}${st.fill ? `, fill ${Math.round((st.fillAlpha ?? 1) * 100)}%` : ', no fill'}. Tap to use it on the active layer`;
-      btn('🗑', () => app.removeLayer(l.id), ls.length <= 1);
-      const grip = btn('☰', () => {}, ls.length <= 1, 'grip');
-      row.dataset.id = l.id;
+      btn(ctl, '🗑', () => app.removeLayer(l.id), ls.length <= 1, 'ldel');
+      const grip = btn(row, '☰', () => {}, ls.length <= 1, 'grip');
       grip.addEventListener('pointerdown', e => startDrag(e, row, grip));
       llist.appendChild(row);
     });
+    clearTimeout(thumbTimer); thumbTimer = window.setTimeout(drawThumbs, 30); // after the rebuild, and coalesced when updates come in quickly
   }
   $('#addLayer').onclick = () => app.addLayer();
 

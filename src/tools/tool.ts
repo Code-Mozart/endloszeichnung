@@ -9,6 +9,8 @@ export interface Tool {
   cancel(): void;
   /** Called when another tool takes over (or the drawing is switched). */
   deactivate?(): void;
+  /** The document changed (undo/redo, edits): a tool holding copies of document data can refresh them. */
+  storeChanged?(): void;
   /** Work in progress that has its own undo/redo (e.g. the vertices of a polygon being drawn). Return true if handled. */
   undo?(): boolean;
   redo?(): boolean;

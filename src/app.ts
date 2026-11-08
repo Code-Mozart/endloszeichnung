@@ -54,6 +54,7 @@ export class App {
       for (const id of this.selection) if (!this.store.strokes.has(id)) this.selection.delete(id);
       if (!this.store.layers.some(l => l.id === this.activeLayer)) this.activate(this.store.layers[this.store.layers.length - 1].id);
       this.contentDirty = true; this.scheduleSave(); this.requestRender(); this.notify();
+      this.activeTool().storeChanged?.();
     });
   }
   activeTool() { return this.tools[this.toolId]; }
