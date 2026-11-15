@@ -1,6 +1,6 @@
 import type { App } from './app';
 import { PERIOD as P, Obj } from './types';
-import { dashPattern, imageCorners, objBB, strokeFill, strokePath } from './geom';
+import { dashPattern, imageCorners, objBB, strokeFill, strokePath, strokePathAt } from './geom';
 import { getBitmap } from './images';
 import { groupByLayer, paintLayers, scratchCanvas } from './scene';
 
@@ -9,6 +9,8 @@ function rng(min: number, max: number, vmin: number, vmax: number, wrap: boolean
   const a = Math.ceil((vmin - max) / P), b = Math.floor((vmax - min) / P);
   return [a, Math.min(b, a + 11)];
 }
+
+let sceneCache: HTMLCanvasElement | null = null, sceneKey = '';
 
 export function render(ctx: CanvasRenderingContext2D, app: App) {
   const { view, wrap } = app, { zoom, rot, cx, cy } = view.cam;
@@ -37,11 +39,11 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
   setup(ctx);
   const drawOne = (c: CanvasRenderingContext2D, s: Obj) => {
     const bb = objBB(s), sel = app.selection.has(s.id);
-    const path = s.type === 'stroke' ? strokePath(s) : null, bmp = s.type === 'image' ? getBitmap(s.img) : null;
+    const path = s.type === 'stroke' ? strokePathAt(s, zoom) : null, bmp = s.type === 'image' ? getBitmap(s.img) : null;
     const [i0, i1] = rng(bb.minX, bb.maxX, vb.minX, vb.maxX, wrap.x);
     const [j0, j1] = rng(bb.minY, bb.maxY, vb.minY, vb.maxY, wrap.y);
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
-      c.save(); c.translate(i * P, j * P);
+      c.save(); if (i || j) c.translate(i * P, j * P);
       if (s.type === 'stroke') {
         if (sel) { c.globalAlpha = 1; c.setLineDash([]); c.strokeStyle = 'rgba(41,121,255,.35)'; c.lineWidth = s.width + 9 / zoom; c.stroke(path!); }
         const fl = strokeFill(s);
@@ -57,9 +59,30 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
       c.restore();
     }
   };
-  const strokes = [...app.store.strokes.values()].map(s => app.preview.get(s.id) ?? s);
-  paintLayers(ctx, app.store.layers, groupByLayer(strokes, app.store.layers),
-    () => scratchCanvas(ctx.canvas.width, ctx.canvas.height), setup, drawOne);
+  const all = [...app.store.strokes.values()].map(s => app.preview.get(s.id) ?? s);
+  const liveObj = app.liveId ? app.store.strokes.get(app.liveId) : undefined;
+  const paint = (c: CanvasRenderingContext2D, objs: Obj[]) =>
+    paintLayers(c, app.store.layers, groupByLayer(objs, app.store.layers), () => scratchCanvas(ctx.canvas.width, ctx.canvas.height), setup, drawOne);
+  // While the pen draws, everything else is static: keep it in a bitmap and only redraw the live stroke on top.
+  // Only valid when no visible layer above the live stroke's has content, and its own layer is drawn at full opacity.
+  const { layers } = app.store, li = liveObj ? layers.findIndex(l => l.id === app.store.layerOf(liveObj)) : -1;
+  const groups = liveObj ? groupByLayer(all, layers) : null;
+  const cacheOk = !!liveObj && li >= 0 && layers[li].visible && layers[li].opacity >= 0.999 && !app.selection.size && app.preview.size === 0 &&
+    layers.slice(li + 1).every(l => !l.visible || !groups!.get(l.id)?.length);
+  if (cacheOk) {
+    const key = [app.store.rev, app.liveId, cx, cy, zoom, rot, view.w, view.h, app.dpr, wrap.x, wrap.y, app.grid, JSON.stringify(layers)].join('|');
+    if (!sceneCache || sceneKey !== key || sceneCache.width !== ctx.canvas.width || sceneCache.height !== ctx.canvas.height) {
+      sceneCache ??= document.createElement('canvas');
+      sceneCache.width = ctx.canvas.width; sceneCache.height = ctx.canvas.height;
+      const sc = sceneCache.getContext('2d')!;
+      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.setLineDash([]);
+      sc.drawImage(ctx.canvas, 0, 0); // background + grid already painted on ctx
+      setup(sc); paint(sc, all.filter(o => o.id !== app.liveId));
+      sceneKey = key;
+    }
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(sceneCache, 0, 0); ctx.restore();
+    setup(ctx); drawOne(ctx, liveObj!);
+  } else paint(ctx, all);
 
   // subtle seam lines
   if (wrap.x || wrap.y) {

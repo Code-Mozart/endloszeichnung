@@ -39,7 +39,8 @@ const bbCache = new WeakMap<Obj, BB>();
 const pathCache = new WeakMap<Stroke, Path2D>();
 
 /** Call after mutating a stroke in place. */
-export function invalidate(s: Stroke) { bbCache.delete(s); pathCache.delete(s); }
+const lodCache = new WeakMap<Stroke, Map<number, Path2D>>();
+export function invalidate(s: Stroke) { bbCache.delete(s); pathCache.delete(s); lodCache.delete(s); }
 
 export function objBB(s: Obj): BB {
   let b = bbCache.get(s);
@@ -78,6 +79,25 @@ export function pathD(p: number[]): string {
 export function strokePath(s: Stroke): Path2D {
   let p = pathCache.get(s);
   if (!p) { p = new Path2D(pathD(s.pts)); pathCache.set(s, p); }
+  return p;
+}
+
+/**
+ * Path for drawing at a given zoom: points closer than ~1 screen pixel are dropped (cached per power-of-two tolerance),
+ * so zoomed-out views of many strokes stay cheap. Falls back to the full path when nothing would be dropped.
+ */
+export function strokePathAt(s: Stroke, zoom: number): Path2D {
+  const lvl = Math.floor(Math.log2(1 / zoom));
+  if (lvl < 1 || s.pts.length < 40) return strokePath(s);
+  let m = lodCache.get(s); if (!m) lodCache.set(s, (m = new Map()));
+  let p = m.get(lvl);
+  if (!p) {
+    const tol = 2 ** lvl, t2 = tol * tol, q = s.pts, out: number[] = [q[0], q[1]];
+    let lx = q[0], ly = q[1];
+    for (let i = 2; i < q.length - 2; i += 2) if ((q[i] - lx) ** 2 + (q[i + 1] - ly) ** 2 >= t2) { out.push(q[i], q[i + 1]); lx = q[i]; ly = q[i + 1]; }
+    out.push(q[q.length - 2], q[q.length - 1]);
+    p = new Path2D(pathD(out)); m.set(lvl, p);
+  }
   return p;
 }
 

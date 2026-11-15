@@ -91,7 +91,7 @@ export class PenTool implements Tool {
       this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, layer: activeLayer };
       store.applyLive({ removed: [], added: [this.s] });
     }
-    this.arm(p);
+    this.app.liveId = this.s.id; this.arm(p);
   }
   move(p: PInfo) {
     const s = this.s; if (!s) return;
@@ -106,7 +106,7 @@ export class PenTool implements Tool {
   }
   up(p: PInfo) {
     const s = this.s; if (!s) return;
-    clearTimeout(this.timer);
+    clearTimeout(this.timer); this.app.liveId = null;
     if (this.line) this.setLine(p); else this.move(p);
     const { store } = this.app, noGrowth = !!this.old && s.pts.length <= this.base.length;
     // a stroke that ends near its own start (a blob closing in on itself) is closed, so it can be filled
@@ -127,7 +127,7 @@ export class PenTool implements Tool {
     this.s = null; this.old = null; this.line = false;
   }
   cancel() {
-    clearTimeout(this.timer);
+    clearTimeout(this.timer); this.app.liveId = null;
     if (this.s) this.app.store.applyLive({ removed: [this.s], added: this.old ? [this.old] : [] });
     this.s = null; this.old = null; this.line = false;
   }
