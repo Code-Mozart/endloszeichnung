@@ -37,3 +37,29 @@ export async function imageStillUsed(id: string): Promise<boolean> {
   }
   return false;
 }
+
+// ---- backup / restore: everything (drawings with history + gallery images) in one JSON file ----
+const toDataURL = (b: Blob) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+interface Backup { app: 'endloszeichnung'; v: 1; created: number; docs: { doc: DocData; meta: Meta }[]; images: { entry: GalleryEntry; data: string }[] }
+export async function exportBackup(): Promise<{ blob: Blob; docs: number; images: number }> {
+  const docs: Backup['docs'] = [];
+  for (const meta of await listMetas()) { const doc = await get<DocData>('doc:' + meta.id); if (doc) docs.push({ doc, meta }); }
+  const images: Backup['images'] = [];
+  for (const entry of await listGallery()) { const b = await getImageBlob(entry.id); if (b) images.push({ entry, data: await toDataURL(b) }); }
+  const b: Backup = { app: 'endloszeichnung', v: 1, created: Date.now(), docs, images };
+  return { blob: new Blob([JSON.stringify(b)], { type: 'application/json' }), docs: docs.length, images: images.length };
+}
+/** Parse and check a backup file without touching anything; `apply()` then writes it (existing drawings/images with the same id are replaced). */
+export async function readBackup(file: File) {
+  let b: Backup;
+  try { b = JSON.parse(await file.text()); } catch { throw new Error('Not a valid backup file'); }
+  if (b?.app !== 'endloszeichnung' || !Array.isArray(b.docs) || !Array.isArray(b.images)) throw new Error('Not an Endloszeichnung backup');
+  const have = new Set((await listMetas()).map(m => m.id));
+  return {
+    docs: b.docs.length, images: b.images.length, replaced: b.docs.filter(d => have.has(d.doc.id)).map(d => d.doc.id),
+    async apply() {
+      for (const { entry, data } of b.images) await putImage(entry, await (await fetch(data)).blob());
+      for (const { doc, meta } of b.docs) await saveDoc(doc, meta);
+    },
+  };
+}

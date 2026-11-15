@@ -79,7 +79,8 @@
 
   <div id="gal" class="ui pop off">
     <div id="appver"></div>
-    <header><b>Drawings</b><button id="newDoc">＋ New</button></header>
+    <header><b>Drawings</b><button id="backup" title="Download all drawings and gallery images as one backup file">⬇ Backup</button><button id="restore" title="Restore drawings from a backup file">⬆ Restore</button><button id="newDoc">＋ New</button></header>
+    <input id="restoreFile" type="file" accept=".json,application/json" hidden>
     <div id="list"></div>
   </div>
   <script type="module" src="/src/main.ts"></script>
