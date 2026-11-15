@@ -36,6 +36,8 @@ export class App {
   shapeKind: ShapeKind = 'line';
   private opBefore: Layer[] | null = null;
   dpr = 1;
+  /** Id of the stroke the pen is drawing right now (lets the renderer reuse a cached bitmap of everything else). */
+  liveId: string | null = null;
   /** Rotation gesture is locked by default; the rotation button unlocks it briefly. */
   rotLocked = true;
   navActive = false;

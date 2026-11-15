@@ -8,6 +8,8 @@ export class Store {
   layers: Layer[] = defaultLayers(); // bottom -> top
   history: Diff[] = [];
   hIdx = 0;
+  /** Bumped on every content change (not on edits of a live stroke's points); lets the renderer cache the static scene. */
+  rev = 0;
   private ids = new Set<string>(this.layers.map(l => l.id));
   private listeners: (() => void)[] = [];
   onChange(fn: () => void) { this.listeners.push(fn); }
@@ -17,7 +19,7 @@ export class Store {
   load(strokes: Obj[], history: Diff[], hIdx: number, layers: Layer[]) {
     this.strokes = new Map(strokes.map(s => [s.id, s]));
     this.setLayerList(cloneLayers(layers));
-    this.history = history; this.hIdx = hIdx; this.emit();
+    this.history = history; this.hIdx = hIdx; this.rev++; this.emit();
   }
   /** Layer a stroke lives in; unknown or missing layers fall back to the bottom layer. */
   layerOf(s: Obj): string { return s.layer && this.ids.has(s.layer) ? s.layer : this.layers[0].id; }
@@ -25,6 +27,7 @@ export class Store {
 
   /** Apply without recording (live gesture previews). */
   applyLive(d: Diff) {
+    this.rev++;
     for (const s of d.removed) this.strokes.delete(s.id);
     for (const s of d.added) this.strokes.set(s.id, s);
     if (d.layers) this.setLayerList(cloneLayers(d.layers.to));

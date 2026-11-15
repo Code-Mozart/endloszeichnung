@@ -65,7 +65,7 @@ export class ShapeTool implements Tool {
     const { pen, activeLayer } = this.app;
     this.start = p;
     this.s = { id: uid(), type: 'stroke', pts: [p.wx, p.wy], color: pen.color, width: pen.width, alpha: pen.alpha, dash: pen.dash, fill: pen.fill, fillAlpha: pen.fillAlpha, closed: this.app.shapeKind === 'rect' || this.app.shapeKind === 'circle', layer: activeLayer };
-    this.app.store.applyLive({ removed: [], added: [this.s] });
+    this.app.store.applyLive({ removed: [], added: [this.s] }); this.app.liveId = this.s.id;
   }
   move(p: PInfo) {
     if (!this.s || !this.start) return;
@@ -74,11 +74,13 @@ export class ShapeTool implements Tool {
   }
   up(p: PInfo) {
     const s = this.s, a = this.start; if (!s || !a) return;
+    this.app.liveId = null;
     if (Math.hypot(p.sx - a.sx, p.sy - a.sy) < MIN_DRAG_PX) this.app.store.applyLive({ removed: [s], added: [] }); // a tap draws nothing
     else { s.pts = this.build(p); invalidate(s); this.app.store.record({ removed: [], added: [s] }); this.app.colorUsed(s.color, s.closed ? s.fill : null); }
     this.s = null; this.start = null;
   }
   cancel() {
+    this.app.liveId = null;
     if (this.s) this.app.store.applyLive({ removed: [this.s], added: [] });
     this.s = null; this.start = null;
   }
