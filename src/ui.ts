@@ -1,6 +1,6 @@
 import type { App } from './app';
 import type { ToolId } from './tools/tool';
-import { deleteDoc, deleteImageBlob, imageStillUsed, listGallery, listMetas, loadDoc, putImage, removeGalleryEntry } from './persist';
+import { exportBackup, readBackup, deleteDoc, deleteImageBlob, imageStillUsed, listGallery, listMetas, loadDoc, putImage, removeGalleryEntry } from './persist';
 import { decodeFile, forget } from './images';
 import { bounds, download, drawLayerThumb, toBlob, toSVG } from './exporter';
 import { groupByLayer } from './scene';
@@ -437,6 +437,25 @@ export function setupUI(app: App) {
   }
   $('#appver').textContent = 'Endloszeichnung ' + (__APP_VERSION__ === 'dev' ? 'dev build' : 'v' + __APP_VERSION__);
   $('#files').onclick = () => { if (!togglePop('#gal')) renderFiles(); };
+  $('#backup').onclick = async () => {
+    await app.flush();
+    const { blob, docs, images } = await exportBackup();
+    download(blob, `endloszeichnung-backup-${new Date().toISOString().slice(0, 10)}.json`);
+    alert(`Backup saved: ${docs} drawings, ${images} gallery images.`);
+  };
+  const rf = $('#restoreFile') as HTMLInputElement;
+  $('#restore').onclick = () => rf.click();
+  rf.onchange = async () => {
+    const f = rf.files?.[0]; rf.value = ''; if (!f) return;
+    try {
+      const b = await readBackup(f);
+      if (!confirm(`Restore ${b.docs} drawings and ${b.images} gallery images?` + (b.replaced.length ? `\n${b.replaced.length} existing drawings with the same id will be replaced by the backup version.` : '') + '\nOther drawings stay untouched.')) return;
+      app.endToolSession(); await app.flush();
+      const cur = app.doc.id; await b.apply();
+      if (b.replaced.includes(cur)) { app.doc.id = ''; await app.openDoc(cur); } // (id cleared so the open drawing isn't saved over the restored one)
+      await renderFiles();
+    } catch (e) { alert('Restore failed: ' + (e as Error).message); }
+  };
   $('#newDoc').onclick = async () => { app.endToolSession(); await app.flush(); app.newDoc(); gal.classList.add('off'); };
 
   return { activity };

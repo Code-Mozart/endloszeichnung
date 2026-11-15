@@ -79,6 +79,7 @@ body.ui-hidden #tip { opacity:0; }
 .pop, #gal header { touch-action:none; }
 #gal header { display:flex; align-items:center; margin-bottom:8px; }
 #gal header b { flex:1; font-size:15px; }
+#gal header button { margin-left:6px; font-size:13px; }
 #gal button { border:0; background:#e8e8ee; border-radius:8px; padding:0 10px; min-height:36px; min-width:36px; font:inherit; color:inherit; }
 #list { display:flex; flex-direction:column; gap:6px; max-height:48vh; overflow:auto; touch-action:pan-y; }
 #llist, #igrid { touch-action:pan-y; }

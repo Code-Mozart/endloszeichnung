@@ -34,7 +34,7 @@ function worldBox(mat: DOMMatrix, w: number, h: number): BB {
 
 export function render(ctx: CanvasRenderingContext2D, app: App) {
   const { view, wrap } = app, { zoom, rot, cx, cy } = view.cam;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; // (a leftover alpha from the last stroke would let the previous frame shine through)
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
   ctx.translate(view.w / 2, view.h / 2); ctx.rotate(rot); ctx.scale(zoom, zoom); ctx.translate(-cx, -cy);
@@ -54,7 +54,7 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
   const setup = (c: CanvasRenderingContext2D) => {
     c.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
     c.translate(view.w / 2, view.h / 2); c.rotate(rot); c.scale(zoom, zoom); c.translate(-cx, -cy);
-    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.lineCap = 'round'; c.lineJoin = 'round'; c.globalAlpha = 1; c.setLineDash([]);
   };
   setup(ctx);
   const drawOne = (c: CanvasRenderingContext2D, s: Obj, box: BB = vb) => {
@@ -65,9 +65,10 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
       if (px < 1.2) {
         if (px >= 0.3 || s.width * zoom >= 1) { // (a hairline-thin tiny stroke is invisible anyway)
           const [i0, i1] = rng(bb.minX, bb.maxX, box.minX, box.maxX, wrap.x), [j0, j1] = rng(bb.minY, bb.maxY, box.minY, box.maxY, wrap.y);
-          c.globalAlpha = (s.alpha ?? 1) * 0.8; c.fillStyle = s.color;
+          c.save(); c.globalAlpha = (s.alpha ?? 1) * 0.8; c.fillStyle = s.color;
           const d = Math.max(1.2 / zoom, s.width);
           for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) c.fillRect((bb.minX + bb.maxX) / 2 + i * P - d / 2, (bb.minY + bb.maxY) / 2 + j * P - d / 2, d, d);
+          c.restore();
         }
         return;
       }
@@ -184,12 +185,13 @@ export function render(ctx: CanvasRenderingContext2D, app: App) {
         for (const o of d) drawOne(c, o);
       } else for (const o of g) drawOne(c, app.preview.get(o.id) ?? o);
     };
-    if (l.opacity >= 0.999) { paintContent(ctx); setup(ctx); continue; }
+    if (l.opacity >= 0.999) { paintContent(ctx); ctx.globalAlpha = 1; setup(ctx); continue; }
     const sc = scratchCanvas(ctx.canvas.width, ctx.canvas.height), c = sc.getContext('2d')!;
     c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.clearRect(0, 0, sc.width, sc.height);
     setup(c); paintContent(c);
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = l.opacity; ctx.drawImage(sc, 0, 0); ctx.restore();
   }
+  ctx.globalAlpha = 1; setup(ctx);
   if (busy) app.requestRender();
   else if (waiting) setTimeout(() => app.requestRender(), SETTLE_MS + 20);
 
